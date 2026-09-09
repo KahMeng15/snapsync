@@ -19,17 +19,26 @@ ENV VITE_SHARE_BASE_URL=$VITE_SHARE_BASE_URL
 
 RUN npm run build
 
+# Prune dev dependencies before copying to final image
+WORKDIR /app/shared
+RUN npm prune --omit=dev
+
+WORKDIR /app/photobooth-server
+RUN npm prune --omit=dev
+
 FROM node:20-alpine
 
 WORKDIR /app
 
 RUN apk add --no-cache curl
 
+# Copy pruned shared directory (includes production node_modules)
 COPY --from=builder /app/shared ./shared
 COPY --from=builder /app/photobooth-server/package*.json ./photobooth-server/
+# Copy pruned server node_modules
+COPY --from=builder /app/photobooth-server/node_modules ./photobooth-server/node_modules
 
 WORKDIR /app/photobooth-server
-RUN npm ci --omit=dev
 
 COPY --from=builder /app/photobooth-server/dist ./dist
 COPY --from=builder /app/photobooth-server/public ./public

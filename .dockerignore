@@ -1,0 +1,14 @@
+node_modules
+npm-debug.log
+dist
+.env
+.git
+*.md
+.DS_Store
+storage
+photobooth-server/node_modules
+photobooth-server/dist
+photobooth-share/node_modules
+photobooth-share/dist
+shared/node_modules
+shared/dist

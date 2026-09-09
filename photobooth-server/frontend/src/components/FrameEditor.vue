@@ -678,9 +678,9 @@ function stopResize() {
   flex-direction: column;
   height: 100%;
   background: var(--color-bg);
-  position: absolute;
+  position: fixed;
   inset: 0;
-  z-index: 50;
+  z-index: 9999;
 }
 .editor-header {
   display: flex;
@@ -733,7 +733,9 @@ function stopResize() {
   font-weight: 600;
   outline: none;
   padding: 0.25rem;
-  width: 300px;
+  width: 100%;
+  max-width: 300px;
+  min-width: 100px;
 }
 .name-input:focus { border-color: var(--color-info); }
 .actions { margin-left: auto; }
