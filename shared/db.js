@@ -66,6 +66,15 @@ if (!fs_1.default.existsSync(dbDir)) {
 }
 const dbPath = path_1.default.join(dbDir, 'snapsync.db');
 const db = new better_sqlite3_1.default(dbPath);
+function addColumn(table, def) {
+    try {
+        db.exec(`ALTER TABLE ${table} ADD COLUMN ${def}`);
+    }
+    catch (e) {
+        if (!e.message.includes('duplicate column name'))
+            throw e;
+    }
+}
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 // Remove old tables
@@ -152,120 +161,207 @@ function logAuditAction(userEmail, action, ipAddress, details) {
 try {
     db.exec(`ALTER TABLE events ADD COLUMN photo_count INTEGER NOT NULL DEFAULT 4`);
 }
-catch { }
+catch (e) {
+    if (!e.message.includes("duplicate column name"))
+        throw e;
+}
 try {
     db.exec(`ALTER TABLE events ADD COLUMN countdown INTEGER NOT NULL DEFAULT 5`);
 }
-catch { }
+catch (e) {
+    if (!e.message.includes("duplicate column name"))
+        throw e;
+}
 try {
     db.exec(`ALTER TABLE events ADD COLUMN capture_interval INTEGER NOT NULL DEFAULT 1`);
 }
-catch { }
+catch (e) {
+    if (!e.message.includes("duplicate column name"))
+        throw e;
+}
 try {
     db.exec(`ALTER TABLE events ADD COLUMN post_capture_preview INTEGER NOT NULL DEFAULT 2`);
 }
-catch { }
+catch (e) {
+    if (!e.message.includes("duplicate column name"))
+        throw e;
+}
 try {
     db.exec(`ALTER TABLE events ADD COLUMN dslr_iso TEXT NOT NULL DEFAULT 'auto'`);
 }
-catch { }
+catch (e) {
+    if (!e.message.includes("duplicate column name"))
+        throw e;
+}
 try {
     db.exec(`ALTER TABLE events ADD COLUMN dslr_shutterspeed TEXT NOT NULL DEFAULT 'auto'`);
 }
-catch { }
+catch (e) {
+    if (!e.message.includes("duplicate column name"))
+        throw e;
+}
 try {
     db.exec(`ALTER TABLE events ADD COLUMN dslr_aperture TEXT NOT NULL DEFAULT 'auto'`);
 }
-catch { }
+catch (e) {
+    if (!e.message.includes("duplicate column name"))
+        throw e;
+}
 try {
     db.exec(`ALTER TABLE events ADD COLUMN dslr_focus_mode TEXT NOT NULL DEFAULT 'auto'`);
 }
-catch { }
+catch (e) {
+    if (!e.message.includes("duplicate column name"))
+        throw e;
+}
 try {
     db.exec(`ALTER TABLE global_settings ADD COLUMN dslr_aperture TEXT NOT NULL DEFAULT 'auto'`);
 }
-catch { }
+catch (e) {
+    if (!e.message.includes("duplicate column name"))
+        throw e;
+}
 try {
     db.exec(`ALTER TABLE global_settings ADD COLUMN dslr_focus_mode TEXT NOT NULL DEFAULT 'auto'`);
 }
-catch { }
+catch (e) {
+    if (!e.message.includes("duplicate column name"))
+        throw e;
+}
 try {
     db.exec(`ALTER TABLE events ADD COLUMN dslr_whitebalance TEXT NOT NULL DEFAULT 'auto'`);
 }
-catch { }
+catch (e) {
+    if (!e.message.includes("duplicate column name"))
+        throw e;
+}
 try {
     db.exec(`ALTER TABLE global_settings ADD COLUMN dslr_whitebalance TEXT NOT NULL DEFAULT 'auto'`);
 }
-catch { }
+catch (e) {
+    if (!e.message.includes("duplicate column name"))
+        throw e;
+}
 try {
     db.exec(`ALTER TABLE camera_settings ADD COLUMN dslr_whitebalance TEXT NOT NULL DEFAULT 'auto'`);
 }
-catch { }
+catch (e) {
+    if (!e.message.includes("duplicate column name"))
+        throw e;
+}
 try {
     db.exec(`ALTER TABLE events ADD COLUMN dslr_whitebalance_kelvin INTEGER NOT NULL DEFAULT 5200`);
 }
-catch { }
+catch (e) {
+    if (!e.message.includes("duplicate column name"))
+        throw e;
+}
 try {
     db.exec(`ALTER TABLE events ADD COLUMN obfuscate_links INTEGER NOT NULL DEFAULT 0`);
 }
-catch { }
+catch (e) {
+    if (!e.message.includes("duplicate column name"))
+        throw e;
+}
 try {
     db.exec(`ALTER TABLE events ADD COLUMN expiry_type TEXT NOT NULL DEFAULT 'none'`);
 }
-catch { }
+catch (e) {
+    if (!e.message.includes("duplicate column name"))
+        throw e;
+}
 try {
     db.exec(`ALTER TABLE events ADD COLUMN expiry_value TEXT NOT NULL DEFAULT ''`);
 }
-catch { }
+catch (e) {
+    if (!e.message.includes("duplicate column name"))
+        throw e;
+}
 try {
     db.exec(`ALTER TABLE events ADD COLUMN organizer TEXT NOT NULL DEFAULT ''`);
 }
-catch { }
+catch (e) {
+    if (!e.message.includes("duplicate column name"))
+        throw e;
+}
 try {
     db.exec(`ALTER TABLE events ADD COLUMN contact_info TEXT NOT NULL DEFAULT ''`);
 }
-catch { }
+catch (e) {
+    if (!e.message.includes("duplicate column name"))
+        throw e;
+}
 try {
     db.exec(`ALTER TABLE events ADD COLUMN operator_password TEXT`);
 }
-catch { }
+catch (e) {
+    if (!e.message.includes("duplicate column name"))
+        throw e;
+}
 try {
     db.exec(`ALTER TABLE global_settings ADD COLUMN dslr_whitebalance_kelvin INTEGER NOT NULL DEFAULT 5200`);
 }
-catch { }
+catch (e) {
+    if (!e.message.includes("duplicate column name"))
+        throw e;
+}
 try {
     db.exec(`ALTER TABLE global_settings ADD COLUMN organizer TEXT NOT NULL DEFAULT ''`);
 }
-catch { }
+catch (e) {
+    if (!e.message.includes("duplicate column name"))
+        throw e;
+}
 try {
     db.exec(`ALTER TABLE global_settings ADD COLUMN contact_info TEXT NOT NULL DEFAULT ''`);
 }
-catch { }
+catch (e) {
+    if (!e.message.includes("duplicate column name"))
+        throw e;
+}
 // Phase 2: Rate Limits & Bandwidth
 try {
     db.exec(`ALTER TABLE global_settings ADD COLUMN api_rate_limit_admin INTEGER NOT NULL DEFAULT 500`);
 }
-catch { }
+catch (e) {
+    if (!e.message.includes("duplicate column name"))
+        throw e;
+}
 try {
     db.exec(`ALTER TABLE global_settings ADD COLUMN api_rate_limit_share INTEGER NOT NULL DEFAULT 300`);
 }
-catch { }
+catch (e) {
+    if (!e.message.includes("duplicate column name"))
+        throw e;
+}
 try {
     db.exec(`ALTER TABLE global_settings ADD COLUMN bw_limit_admin INTEGER NOT NULL DEFAULT 1000`);
 }
-catch { } // in MB/15m
+catch (e) {
+    if (!e.message.includes("duplicate column name"))
+        throw e;
+} // in MB/15m
 try {
     db.exec(`ALTER TABLE global_settings ADD COLUMN bw_limit_share INTEGER NOT NULL DEFAULT 100`);
 }
-catch { } // in MB/15m
+catch (e) {
+    if (!e.message.includes("duplicate column name"))
+        throw e;
+} // in MB/15m
 try {
     db.exec(`ALTER TABLE global_settings ADD COLUMN lockout_duration INTEGER NOT NULL DEFAULT 5`);
 }
-catch { } // in minutes
+catch (e) {
+    if (!e.message.includes("duplicate column name"))
+        throw e;
+} // in minutes
 try {
     db.exec(`ALTER TABLE camera_settings ADD COLUMN dslr_whitebalance_kelvin INTEGER NOT NULL DEFAULT 5200`);
 }
-catch { }
+catch (e) {
+    if (!e.message.includes("duplicate column name"))
+        throw e;
+}
 // Seed defaults row
 db.exec(`
   INSERT OR IGNORE INTO global_settings (id, photo_count, countdown, capture_interval, post_capture_preview, dslr_iso, dslr_shutterspeed, dslr_aperture, dslr_focus_mode, dslr_whitebalance, dslr_whitebalance_kelvin)
@@ -294,100 +390,172 @@ db.exec(`
 try {
     db.exec(`ALTER TABLE photo_sessions ADD COLUMN archived INTEGER NOT NULL DEFAULT 0`);
 }
-catch { }
+catch (e) {
+    if (!e.message.includes("duplicate column name"))
+        throw e;
+}
 try {
     db.exec(`ALTER TABLE photo_sessions ADD COLUMN share_id TEXT`);
 }
-catch { }
+catch (e) {
+    if (!e.message.includes("duplicate column name"))
+        throw e;
+}
 try {
     db.exec(`ALTER TABLE photo_sessions ADD COLUMN upload_status TEXT NOT NULL DEFAULT 'reserved'`);
 }
-catch { }
+catch (e) {
+    if (!e.message.includes("duplicate column name"))
+        throw e;
+}
 try {
     db.exec(`ALTER TABLE photo_sessions ADD COLUMN upload_started_at INTEGER`);
 }
-catch { }
+catch (e) {
+    if (!e.message.includes("duplicate column name"))
+        throw e;
+}
 try {
     db.exec(`ALTER TABLE photo_sessions ADD COLUMN upload_completed_at INTEGER`);
 }
-catch { }
+catch (e) {
+    if (!e.message.includes("duplicate column name"))
+        throw e;
+}
 try {
     db.exec(`ALTER TABLE photo_sessions ADD COLUMN upload_size_bytes INTEGER`);
 }
-catch { }
+catch (e) {
+    if (!e.message.includes("duplicate column name"))
+        throw e;
+}
 try {
     db.exec(`ALTER TABLE photo_sessions ADD COLUMN upload_avg_speed_kbps REAL`);
 }
-catch { }
+catch (e) {
+    if (!e.message.includes("duplicate column name"))
+        throw e;
+}
 try {
     db.exec(`ALTER TABLE photo_sessions ADD COLUMN width INTEGER NOT NULL DEFAULT 0`);
 }
-catch { }
+catch (e) {
+    if (!e.message.includes("duplicate column name"))
+        throw e;
+}
 try {
     db.exec(`ALTER TABLE photo_sessions ADD COLUMN height INTEGER NOT NULL DEFAULT 0`);
 }
-catch { }
+catch (e) {
+    if (!e.message.includes("duplicate column name"))
+        throw e;
+}
 // --- Motivational Messages Migrations ---
 try {
     db.exec(`ALTER TABLE events ADD COLUMN msg_homepage TEXT`);
 }
-catch { }
+catch (e) {
+    if (!e.message.includes("duplicate column name"))
+        throw e;
+}
 try {
     db.exec(`ALTER TABLE events ADD COLUMN msg_countdown TEXT`);
 }
-catch { }
+catch (e) {
+    if (!e.message.includes("duplicate column name"))
+        throw e;
+}
 try {
     db.exec(`ALTER TABLE events ADD COLUMN msg_post_session TEXT`);
 }
-catch { }
+catch (e) {
+    if (!e.message.includes("duplicate column name"))
+        throw e;
+}
 try {
     db.exec(`ALTER TABLE events ADD COLUMN msg_share_title TEXT`);
 }
-catch { }
+catch (e) {
+    if (!e.message.includes("duplicate column name"))
+        throw e;
+}
 try {
     db.exec(`ALTER TABLE events ADD COLUMN msg_order TEXT NOT NULL DEFAULT 'random'`);
 }
-catch { }
+catch (e) {
+    if (!e.message.includes("duplicate column name"))
+        throw e;
+}
 try {
     db.exec(`ALTER TABLE global_settings ADD COLUMN msg_homepage TEXT`);
 }
-catch { }
+catch (e) {
+    if (!e.message.includes("duplicate column name"))
+        throw e;
+}
 try {
     db.exec(`ALTER TABLE global_settings ADD COLUMN msg_countdown TEXT`);
 }
-catch { }
+catch (e) {
+    if (!e.message.includes("duplicate column name"))
+        throw e;
+}
 try {
     db.exec(`ALTER TABLE global_settings ADD COLUMN msg_post_session TEXT`);
 }
-catch { }
+catch (e) {
+    if (!e.message.includes("duplicate column name"))
+        throw e;
+}
 try {
     db.exec(`ALTER TABLE global_settings ADD COLUMN msg_share_title TEXT`);
 }
-catch { }
+catch (e) {
+    if (!e.message.includes("duplicate column name"))
+        throw e;
+}
 try {
     db.exec(`ALTER TABLE global_settings ADD COLUMN msg_order TEXT NOT NULL DEFAULT 'random'`);
 }
-catch { }
+catch (e) {
+    if (!e.message.includes("duplicate column name"))
+        throw e;
+}
 try {
     db.exec(`ALTER TABLE global_settings ADD COLUMN msg_seq_index_homepage INTEGER NOT NULL DEFAULT 0`);
 }
-catch { }
+catch (e) {
+    if (!e.message.includes("duplicate column name"))
+        throw e;
+}
 try {
     db.exec(`ALTER TABLE global_settings ADD COLUMN msg_seq_index_countdown INTEGER NOT NULL DEFAULT 0`);
 }
-catch { }
+catch (e) {
+    if (!e.message.includes("duplicate column name"))
+        throw e;
+}
 try {
     db.exec(`ALTER TABLE global_settings ADD COLUMN msg_seq_index_post_session INTEGER NOT NULL DEFAULT 0`);
 }
-catch { }
+catch (e) {
+    if (!e.message.includes("duplicate column name"))
+        throw e;
+}
 try {
     db.exec(`ALTER TABLE global_settings ADD COLUMN msg_seq_index_share_title INTEGER NOT NULL DEFAULT 0`);
 }
-catch { }
+catch (e) {
+    if (!e.message.includes("duplicate column name"))
+        throw e;
+}
 try {
     db.exec(`ALTER TABLE photo_sessions ADD COLUMN share_title TEXT`);
 }
-catch { }
+catch (e) {
+    if (!e.message.includes("duplicate column name"))
+        throw e;
+}
 // ----------------------------------------
 db.exec(`
   CREATE TABLE IF NOT EXISTS event_shares (

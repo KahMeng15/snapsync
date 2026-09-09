@@ -36,6 +36,6 @@ services:
     volumes:
       - ./storage/photos:/app/storage/photos:ro
       - ./storage/frames:/app/storage/frames:ro
-      - ./storage/logs:/app/storage/logs:ro
-      - ./storage/db:/app/storage/db:ro
+      - ./storage/logs:/app/storage/logs
+      - ./storage/db:/app/storage/db
     restart: always
