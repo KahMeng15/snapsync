@@ -1,0 +1,68 @@
+name: Build and Publish Docker Images
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU (for multi-architecture builds)
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata (Server)
+        id: meta-server
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-server
+
+      - name: Build and push Server Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./snapsync-server/Dockerfile
+          push: true
+          tags: ${{ steps.meta-server.outputs.tags }}
+          labels: ${{ steps.meta-server.outputs.labels }}
+          platforms: linux/amd64,linux/arm64
+          build-args: |
+            VITE_SHARE_BASE_URL=${{ secrets.VITE_SHARE_BASE_URL || 'http://localhost:3001/snapsync/share' }}
+
+      - name: Extract Docker metadata (Share)
+        id: meta-share
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-share
+
+      - name: Build and push Share Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./snapsync-share/Dockerfile
+          push: true
+          tags: ${{ steps.meta-share.outputs.tags }}
+          labels: ${{ steps.meta-share.outputs.labels }}
+          platforms: linux/amd64,linux/arm64

@@ -1,11 +1,6 @@
 services:
   snapsync-server:
-    build:
-      context: .
-      dockerfile: snapsync-server/Dockerfile
-      args:
-        - VITE_SHARE_BASE_URL=${VITE_SHARE_BASE_URL}
-
+    image: ghcr.io/kahmeng15/snapsync-server:main
     container_name: snapsync-server
     ports:
       - "3000:3000"
@@ -28,9 +23,7 @@ services:
       retries: 3
 
   snapsync-share:
-    build:
-      context: .
-      dockerfile: snapsync-share/Dockerfile
+    image: ghcr.io/kahmeng15/snapsync-share:main
     container_name: snapsync-share
     ports:
       - "3001:3001"
