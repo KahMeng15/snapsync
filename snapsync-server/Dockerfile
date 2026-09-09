@@ -9,6 +9,7 @@ COPY snapsync-server/package*.json ./snapsync-server/
 
 WORKDIR /app/shared
 RUN npm ci
+RUN npm run build
 
 WORKDIR /app/snapsync-server
 RUN npm ci

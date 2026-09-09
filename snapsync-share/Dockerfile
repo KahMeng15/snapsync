@@ -7,6 +7,7 @@ COPY snapsync-share ./snapsync-share
 
 WORKDIR /app/shared
 RUN npm ci
+RUN npm run build
 
 WORKDIR /app/snapsync-share
 RUN npm ci

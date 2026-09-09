@@ -3,7 +3,7 @@ import path from 'path'
 import fs from 'fs'
 import { randomInt, randomBytes } from 'crypto'
 import { config } from './config'
-import { logger } from './utils/logger'
+import { logger } from './logger'
 
 const dbDir = path.join(config.storage.logs, '..', 'db')
 if (!fs.existsSync(dbDir)) {
