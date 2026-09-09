@@ -8,7 +8,7 @@
 
 ### Server Setup
 ```bash
-cd photobooth-server
+cd snapsync-server
 cp .env.example .env
 # Edit .env to set strong passwords and secrets
 
@@ -20,23 +20,23 @@ docker compose up -d --build
 
 ### Client Setup
 ```bash
-cd photobooth-client
+cd snapsync-client
 npm install
 npm run make
 # Installers in ./out/
 ```
 
-## Public Hosting (kmeng.com/app/hellomyphotos/)
+## Public Hosting (kmeng.com/app/snapsync/)
 
 ### DNS Setup
-- Create CNAME: `hellomyphotos` → your server IP
+- Create CNAME: `snapsync` → your server IP
 
 ### Nginx + SSL
 ```bash
 sudo apt install nginx certbot python3-certbot-nginx
-sudo certbot certonly -d hellomyphotos.kmeng.com
-sudo cp ../nginx.conf /etc/nginx/sites-available/hellomyphotos
-sudo ln -s /etc/nginx/sites-available/hellomyphotos /etc/nginx/sites-enabled/
+sudo certbot certonly -d snapsync.kmeng.com
+sudo cp ../nginx.conf /etc/nginx/sites-available/snapsync
+sudo ln -s /etc/nginx/sites-available/snapsync /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl reload nginx
 ```
 

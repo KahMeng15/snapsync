@@ -10,7 +10,7 @@ if (!fs.existsSync(dbDir)) {
   fs.mkdirSync(dbDir, { recursive: true })
 }
 
-const dbPath = path.join(dbDir, 'hellomyphoto.db')
+const dbPath = path.join(dbDir, 'snapsync.db')
 const db = new Database(dbPath)
 
 db.pragma('journal_mode = WAL')

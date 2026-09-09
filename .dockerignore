@@ -6,9 +6,9 @@ dist
 *.md
 .DS_Store
 storage
-photobooth-server/node_modules
-photobooth-server/dist
-photobooth-share/node_modules
-photobooth-share/dist
+snapsync-server/node_modules
+snapsync-server/dist
+snapsync-share/node_modules
+snapsync-share/dist
 shared/node_modules
 shared/dist

@@ -1,4 +1,4 @@
-# hellomyphoto
+# snapsync
 
 Self-hosted photo booth system. Two-node: Electron capture client + Express/Vue 3 operator hub.
 
@@ -10,11 +10,11 @@ Booth Client (Electron) ──HTTP/WS──→ Server (Express + Vue 3 + Sharp +
 
 ```bash
 # Server (Docker)
-cd photobooth-server && cp .env.example .env
+cd snapsync-server && cp .env.example .env
 docker compose up -d --build
 
 # Client (build installer)
-cd photobooth-client && npm install && npm run make
+cd snapsync-client && npm install && npm run make
 ```
 
 ## Development
@@ -33,9 +33,9 @@ docker compose -f docker-compose.dev.yml up --build
 | Express API + WebSocket | `http://localhost:3000` |
 | Vue 3 operator dashboard (HMR) | `http://localhost:5173` |
 
-Default credentials: `operator@hellomyphoto.local` / `admin123`
+Default credentials: `operator@snapsync.local` / `admin123`
 
-> **Note** — source files in `./photobooth-server` are bind-mounted into the container, so any edits are reflected immediately without rebuilding. `node_modules` lives in an anonymous volume to prevent host/container OS conflicts.
+> **Note** — source files in `./snapsync-server` are bind-mounted into the container, so any edits are reflected immediately without rebuilding. `node_modules` lives in an anonymous volume to prevent host/container OS conflicts.
 
 To stop:
 
@@ -48,7 +48,7 @@ docker compose -f docker-compose.dev.yml down
 ### Server (2 terminals)
 
 ```bash
-cd photobooth-server
+cd snapsync-server
 
 # Terminal 1 — Express API + WebSocket (hot-reload, logs all requests)
 npm run dev
@@ -62,7 +62,7 @@ API calls from the frontend are proxied to the Express server automatically. Ope
 ### Electron Client (1 terminal)
 
 ```bash
-cd photobooth-client
+cd snapsync-client
 npm run dev
 ```
 
@@ -70,7 +70,7 @@ Compiles TypeScript and launches the booth in a framed window with DevTools open
 
 ## Camera Support
 
-hellomyphoto supports two capture modes, switchable from the Settings panel (`Cmd/Ctrl+Shift+S`):
+snapsync supports two capture modes, switchable from the Settings panel (`Cmd/Ctrl+Shift+S`):
 
 | Mode | Description |
 |---|---|
@@ -97,7 +97,7 @@ and troubleshooting.
 
 ## Auth
 
-Default: `operator@hellomyphoto.local` / `admin123`
+Default: `operator@snapsync.local` / `admin123`
 
 ## Docs
 

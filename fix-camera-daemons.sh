@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # fix-camera-daemons.sh
 # Restores macOS camera daemons that were permanently disabled by the
-# hellomyphotos photobooth app (com.apple.ptpcamerad, com.apple.imagecaptured).
+# snapsync snapsync app (com.apple.ptpcamerad, com.apple.imagecaptured).
 # Run this once to fix Capture One, Lightroom Classic, and any other tether app.
 #
 # Usage:
@@ -28,7 +28,7 @@ echo -e "${BOLD}  macOS Camera Daemon Restoration Tool  ${RESET}"
 echo -e "${BOLD}========================================${RESET}"
 echo ""
 info "This script re-enables the macOS camera services that were"
-info "permanently disabled by the hellomyphotos photobooth app."
+info "permanently disabled by the snapsync snapsync app."
 echo ""
 
 UID_PATH="gui/$(id -u)"
@@ -109,6 +109,6 @@ echo "  2. Plug it back in"
 echo "  3. macOS will auto-launch PTPCamera for the device"
 echo "  4. Open Capture One / Lightroom Classic — tethering should work again"
 echo ""
-echo -e "${BOLD}Note:${RESET} The photobooth app has been patched and will no longer"
+echo -e "${BOLD}Note:${RESET} The snapsync app has been patched and will no longer"
 echo "permanently disable these services in future sessions."
 echo ""

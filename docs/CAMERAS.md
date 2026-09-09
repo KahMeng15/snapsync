@@ -1,6 +1,6 @@
 # Camera Support — DSLR & Mirrorless
 
-hellomyphoto supports professional DSLR and mirrorless cameras connected via USB,
+snapsync supports professional DSLR and mirrorless cameras connected via USB,
 in addition to the built-in webcam mode. Live preview frames are streamed from
 the camera at ~15 FPS, and the actual hardware shutter fires for each capture.
 
@@ -70,7 +70,7 @@ Canon EOS 80D                  usb:020,006
 
 4. Plug in your camera via USB. DigiCamControl should detect it automatically.
 
-5. Start the hellomyphoto booth client. The booth communicates with
+5. Start the snapsync booth client. The booth communicates with
    DigiCamControl over `http://localhost:5513`.
 
 > **Note:** DigiCamControl must be running before you launch the booth, and

@@ -25,7 +25,7 @@ export const config = {
   },
 
   operator: {
-    email: process.env.OPERATOR_EMAIL || 'operator@hellomyphoto.local',
+    email: process.env.OPERATOR_EMAIL || 'operator@snapsync.local',
     password: process.env.OPERATOR_PASSWORD || 'admin123',
   },
 

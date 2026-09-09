@@ -1,7 +1,7 @@
 services:
-  photobooth-server-dev:
+  snapsync-server-dev:
     image: node:20
-    container_name: hellomyphoto-server-dev
+    container_name: snapsync-server-dev
     working_dir: /app
     # Runs both backend and frontend development servers concurrently
     command: sh -c "cd /shared && npm install && cd /app && npm install && npx concurrently \"npm run dev\" \"npm run dev:frontend\""
@@ -13,7 +13,7 @@ services:
       PORT: 3000
       JWT_SECRET: dev-secret
       REFRESH_TOKEN_SECRET: dev-refresh-secret
-      OPERATOR_EMAIL: operator@hellomyphoto.local
+      OPERATOR_EMAIL: operator@snapsync.local
       OPERATOR_PASSWORD: admin123
       ALLOWED_ORIGINS: "*"
       COOKIE_SAME_SITE: lax
@@ -25,15 +25,15 @@ services:
 
       STORAGE_ROOT: /app
     volumes:
-      - ./photobooth-server:/app
+      - ./snapsync-server:/app
       - ./shared:/shared
       - /app/node_modules
       - /shared/node_modules
     restart: unless-stopped
 
-  photobooth-share-dev:
+  snapsync-share-dev:
     image: node:20
-    container_name: hellomyphoto-share-dev
+    container_name: snapsync-share-dev
     working_dir: /app
     command: sh -c "cd /shared && npm install && cd /app && npm install && npx concurrently \"npm run dev\" \"npm run dev:frontend\""
     ports:
@@ -42,12 +42,12 @@ services:
       NODE_ENV: development
       PORT: 3001
       SHARE_BASE_URL: http://localhost:3001/snapsync
-      ADMIN_INTERNAL_URL: http://photobooth-server-dev:3000
+      ADMIN_INTERNAL_URL: http://snapsync-server-dev:3000
       INTERNAL_API_SECRET: dev-internal-secret
       STORAGE_ROOT: /app
     volumes:
-      - ./photobooth-share:/app
-      - ./photobooth-server/storage:/app/storage
+      - ./snapsync-share:/app
+      - ./snapsync-server/storage:/app/storage
 
       - ./shared:/shared
       - /app/node_modules

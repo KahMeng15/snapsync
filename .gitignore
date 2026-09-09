@@ -4,30 +4,30 @@ dist/
 *.log
 
 # Photo booth server storage (images, frames, logs)
-photobooth-server/storage/photos/*
-!photobooth-server/storage/photos/.gitkeep
-photobooth-server/storage/frames/*
-!photobooth-server/storage/frames/.gitkeep
-photobooth-server/storage/logs/*
-!photobooth-server/storage/logs/.gitkeep
+snapsync-server/storage/photos/*
+!snapsync-server/storage/photos/.gitkeep
+snapsync-server/storage/frames/*
+!snapsync-server/storage/frames/.gitkeep
+snapsync-server/storage/logs/*
+!snapsync-server/storage/logs/.gitkeep
 
-photobooth-client/db/
-photobooth-client/out/
+snapsync-client/db/
+snapsync-client/out/
 .DS_Store
 *.local
 
 # Built Vite assets (hash-based filenames change every build)
-photobooth-server/public/
+snapsync-server/public/
 
 # SQLite database (local runtime data)
-photobooth-server/storage/db/
+snapsync-server/storage/db/
 tmpfile*
 
 # Share server generated assets
-photobooth-share/public/app.js
-photobooth-share/public/app.js.map
-photobooth-share/public/app.css
-photobooth-share/dist/
+snapsync-share/public/app.js
+snapsync-share/public/app.js.map
+snapsync-share/public/app.css
+snapsync-share/dist/
 
 # Shared library
 shared/dist/
@@ -36,4 +36,4 @@ shared/dist/
 /storage/
 
 # Accidental share storage
-photobooth-share/storage/
+snapsync-share/storage/
