@@ -149,6 +149,23 @@ try { db.exec(`ALTER TABLE global_settings ADD COLUMN lockout_duration INTEGER N
 
 try { db.exec(`ALTER TABLE camera_settings ADD COLUMN dslr_whitebalance_kelvin INTEGER NOT NULL DEFAULT 5200`) } catch (e: any) { if (!e.message.includes("duplicate column name")) throw e; }
 
+// --- Motivational Messages Migrations --- (must run BEFORE the UPDATE that seeds msg_ defaults below)
+try { db.exec(`ALTER TABLE events ADD COLUMN msg_homepage TEXT`) } catch (e: any) { if (!e.message.includes("duplicate column name")) throw e; }
+try { db.exec(`ALTER TABLE events ADD COLUMN msg_countdown TEXT`) } catch (e: any) { if (!e.message.includes("duplicate column name")) throw e; }
+try { db.exec(`ALTER TABLE events ADD COLUMN msg_post_session TEXT`) } catch (e: any) { if (!e.message.includes("duplicate column name")) throw e; }
+try { db.exec(`ALTER TABLE events ADD COLUMN msg_share_title TEXT`) } catch (e: any) { if (!e.message.includes("duplicate column name")) throw e; }
+try { db.exec(`ALTER TABLE events ADD COLUMN msg_order TEXT NOT NULL DEFAULT 'random'`) } catch (e: any) { if (!e.message.includes("duplicate column name")) throw e; }
+
+try { db.exec(`ALTER TABLE global_settings ADD COLUMN msg_homepage TEXT`) } catch (e: any) { if (!e.message.includes("duplicate column name")) throw e; }
+try { db.exec(`ALTER TABLE global_settings ADD COLUMN msg_countdown TEXT`) } catch (e: any) { if (!e.message.includes("duplicate column name")) throw e; }
+try { db.exec(`ALTER TABLE global_settings ADD COLUMN msg_post_session TEXT`) } catch (e: any) { if (!e.message.includes("duplicate column name")) throw e; }
+try { db.exec(`ALTER TABLE global_settings ADD COLUMN msg_share_title TEXT`) } catch (e: any) { if (!e.message.includes("duplicate column name")) throw e; }
+try { db.exec(`ALTER TABLE global_settings ADD COLUMN msg_order TEXT NOT NULL DEFAULT 'random'`) } catch (e: any) { if (!e.message.includes("duplicate column name")) throw e; }
+try { db.exec(`ALTER TABLE global_settings ADD COLUMN msg_seq_index_homepage INTEGER NOT NULL DEFAULT 0`) } catch (e: any) { if (!e.message.includes("duplicate column name")) throw e; }
+try { db.exec(`ALTER TABLE global_settings ADD COLUMN msg_seq_index_countdown INTEGER NOT NULL DEFAULT 0`) } catch (e: any) { if (!e.message.includes("duplicate column name")) throw e; }
+try { db.exec(`ALTER TABLE global_settings ADD COLUMN msg_seq_index_post_session INTEGER NOT NULL DEFAULT 0`) } catch (e: any) { if (!e.message.includes("duplicate column name")) throw e; }
+try { db.exec(`ALTER TABLE global_settings ADD COLUMN msg_seq_index_share_title INTEGER NOT NULL DEFAULT 0`) } catch (e: any) { if (!e.message.includes("duplicate column name")) throw e; }
+
 // Seed defaults row
 db.exec(`
   INSERT OR IGNORE INTO global_settings (id, photo_count, countdown, capture_interval, post_capture_preview, dslr_iso, dslr_shutterspeed, dslr_aperture, dslr_focus_mode, dslr_whitebalance, dslr_whitebalance_kelvin)
@@ -189,23 +206,6 @@ try { db.exec(`ALTER TABLE photo_sessions ADD COLUMN upload_size_bytes INTEGER`)
 try { db.exec(`ALTER TABLE photo_sessions ADD COLUMN upload_avg_speed_kbps REAL`) } catch (e: any) { if (!e.message.includes("duplicate column name")) throw e; }
 try { db.exec(`ALTER TABLE photo_sessions ADD COLUMN width INTEGER NOT NULL DEFAULT 0`) } catch (e: any) { if (!e.message.includes("duplicate column name")) throw e; }
 try { db.exec(`ALTER TABLE photo_sessions ADD COLUMN height INTEGER NOT NULL DEFAULT 0`) } catch (e: any) { if (!e.message.includes("duplicate column name")) throw e; }
-
-// --- Motivational Messages Migrations ---
-try { db.exec(`ALTER TABLE events ADD COLUMN msg_homepage TEXT`) } catch (e: any) { if (!e.message.includes("duplicate column name")) throw e; }
-try { db.exec(`ALTER TABLE events ADD COLUMN msg_countdown TEXT`) } catch (e: any) { if (!e.message.includes("duplicate column name")) throw e; }
-try { db.exec(`ALTER TABLE events ADD COLUMN msg_post_session TEXT`) } catch (e: any) { if (!e.message.includes("duplicate column name")) throw e; }
-try { db.exec(`ALTER TABLE events ADD COLUMN msg_share_title TEXT`) } catch (e: any) { if (!e.message.includes("duplicate column name")) throw e; }
-try { db.exec(`ALTER TABLE events ADD COLUMN msg_order TEXT NOT NULL DEFAULT 'random'`) } catch (e: any) { if (!e.message.includes("duplicate column name")) throw e; }
-
-try { db.exec(`ALTER TABLE global_settings ADD COLUMN msg_homepage TEXT`) } catch (e: any) { if (!e.message.includes("duplicate column name")) throw e; }
-try { db.exec(`ALTER TABLE global_settings ADD COLUMN msg_countdown TEXT`) } catch (e: any) { if (!e.message.includes("duplicate column name")) throw e; }
-try { db.exec(`ALTER TABLE global_settings ADD COLUMN msg_post_session TEXT`) } catch (e: any) { if (!e.message.includes("duplicate column name")) throw e; }
-try { db.exec(`ALTER TABLE global_settings ADD COLUMN msg_share_title TEXT`) } catch (e: any) { if (!e.message.includes("duplicate column name")) throw e; }
-try { db.exec(`ALTER TABLE global_settings ADD COLUMN msg_order TEXT NOT NULL DEFAULT 'random'`) } catch (e: any) { if (!e.message.includes("duplicate column name")) throw e; }
-try { db.exec(`ALTER TABLE global_settings ADD COLUMN msg_seq_index_homepage INTEGER NOT NULL DEFAULT 0`) } catch (e: any) { if (!e.message.includes("duplicate column name")) throw e; }
-try { db.exec(`ALTER TABLE global_settings ADD COLUMN msg_seq_index_countdown INTEGER NOT NULL DEFAULT 0`) } catch (e: any) { if (!e.message.includes("duplicate column name")) throw e; }
-try { db.exec(`ALTER TABLE global_settings ADD COLUMN msg_seq_index_post_session INTEGER NOT NULL DEFAULT 0`) } catch (e: any) { if (!e.message.includes("duplicate column name")) throw e; }
-try { db.exec(`ALTER TABLE global_settings ADD COLUMN msg_seq_index_share_title INTEGER NOT NULL DEFAULT 0`) } catch (e: any) { if (!e.message.includes("duplicate column name")) throw e; }
 
 try { db.exec(`ALTER TABLE photo_sessions ADD COLUMN share_title TEXT`) } catch (e: any) { if (!e.message.includes("duplicate column name")) throw e; }
 // ----------------------------------------
