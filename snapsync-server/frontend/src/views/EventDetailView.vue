@@ -30,6 +30,12 @@
         <div class="feed-header">
           <h2>Photos</h2>
           <div class="feed-header-right">
+            <button @click="toggleSelectMode" :class="['btn-icon', { active: selectMode || selectedSessions.size > 0 }]" title="Select Mode" style="margin-right: 0.25rem;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="9 11 12 14 22 4"></polyline>
+                <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+              </svg>
+            </button>
             <button @click="toggleArchive" :class="['btn-icon', { active: showArchive }]" title="View Archive" style="margin-right: 0.75rem;">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
@@ -60,10 +66,10 @@
           <button v-if="!showArchive" @click="archiveSelected" class="btn-action btn-archive">Archive</button>
           <button v-else @click="restoreSelected" class="btn-action btn-archive">Restore</button>
           <button @click="deleteSelected" class="btn-action btn-delete">Delete</button>
-          <button @click="selectedSessions.clear()" class="btn-action btn-cancel">Clear</button>
+          <button @click="toggleSelectMode" class="btn-action btn-cancel">Clear</button>
         </div>
 
-        <div :class="['session-list', viewMode]" ref="feedRef">
+        <div :class="['session-list', viewMode, { 'is-select-mode': selectMode }]" ref="feedRef">
           <div
             v-for="session in photoSessions"
             :key="session.sessionId"
@@ -92,7 +98,8 @@
             </div>
           </div>
           <div v-if="photoSessions.length === 0" class="empty-state">
-            <p>No photos yet. Waiting for captures...</p>
+            <p v-if="showArchive">No photos</p>
+            <p v-else>No photos yet. Waiting for captures...</p>
           </div>
         </div>
       </section>
@@ -200,6 +207,7 @@ const boothState = ref<string | null>(null)
 const activeBoothError = ref<{ errorId: string, message: string, type: string } | null>(null)
 const showPanel = ref(false)
 const showArchive = ref(false)
+const selectMode = ref(false)
 
 function confirmAsync(message: string, confirmLabel = 'Confirm'): Promise<boolean> {
   return new Promise((resolve) => {
@@ -223,7 +231,15 @@ function handleCancel() {
 function toggleArchive() {
   showArchive.value = !showArchive.value
   selectedSessions.value.clear()
+  selectMode.value = false
   loadSessions()
+}
+
+function toggleSelectMode() {
+  selectMode.value = !selectMode.value
+  if (!selectMode.value) {
+    selectedSessions.value.clear()
+  }
 }
 
 function setViewMode(mode: 'grid-sm' | 'grid-lg' | 'list') {
@@ -333,14 +349,22 @@ async function loadSessions() {
     const { data } = await axios.get(`/api/admin/events/${eventId}/photos`, {
       params: { includeArchived: showArchive.value }
     })
-    photoSessions.value = data.sessions
+    if (showArchive.value) {
+      photoSessions.value = data.sessions.filter((s: any) => s.archived)
+    } else {
+      photoSessions.value = data.sessions
+    }
   } catch (err) {
     console.error('Failed to load sessions', err)
   }
 }
 
 function selectSession(session: PhotoSession) {
-  photosStore.selectSession(session)
+  if (selectMode.value || selectedSessions.value.size > 0) {
+    toggleSelect(session.sessionId)
+  } else {
+    photosStore.selectSession(session)
+  }
 }
 
 function goBack() {
@@ -830,7 +854,8 @@ function formatTime(ts: string) {
   transition: all 0.15s;
 }
 
-.session-card:hover .session-check {
+.session-card:hover .session-check,
+.session-list.is-select-mode .session-check {
   opacity: 1;
 }
 
