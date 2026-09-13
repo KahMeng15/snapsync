@@ -27,8 +27,7 @@ const basePath = '/snapsync'
 
 app.use(`${basePath}/api/share`, shareRateLimiter as any, shareRoutes as any)
 
-const isDev = process.argv.includes('tsx') || __dirname.includes('src');
-const publicPath = path.join(__dirname, isDev ? '..' : '../../', 'public');
+const publicPath = path.join(process.cwd(), 'public');
 app.use(`${basePath}/share`, express.static(publicPath))
 
 app.get(`${basePath}/share/*`, (req, res) => {

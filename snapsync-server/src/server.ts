@@ -68,7 +68,7 @@ app.use(cookieParser())
 app.use(setCsrfToken)
 app.use(requestLogger)
 
-const publicPath = path.join(projectRoot, 'public');
+const publicPath = path.join(process.cwd(), 'public');
 const staticOpts = { maxAge: '1y', etag: false, immutable: true };
 
 app.use(express.static(publicPath, staticOpts));
@@ -316,7 +316,7 @@ app.get('*', (req, res) => {
   if (isApi) {
     return res.status(404).json({ error: 'Not found' })
   }
-  res.sendFile(path.join(projectRoot, 'public', 'index.html'))
+  res.sendFile(path.join(publicPath, 'index.html'))
 })
 
 server.listen(config.port, () => {
