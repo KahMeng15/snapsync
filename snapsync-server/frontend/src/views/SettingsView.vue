@@ -113,7 +113,16 @@
           </div>
         </section>
 
-      
+      <section class="card">
+        <h2>Remote View Stream</h2>
+        <p class="card-desc">Limits how many operators can receive the live video stream simultaneously. Does not affect remote control access.</p>
+        <div class="settings-box">
+          <div class="field-row">
+            <label>Max Concurrent Preview Viewers</label>
+            <input type="number" min="1" max="20" v-model.number="settings.remotePreviewMaxViewers" class="num-input" />
+          </div>
+        </div>
+      </section>
       <section class="card">
         <h2>Default Motivational Messages (All Events)</h2>
         
@@ -165,8 +174,8 @@ const shutterChoices = ['auto', '1/30', '1/40', '1/50', '1/60', '1/80', '1/100',
 const apertureChoices = ['auto', '2.8', '4', '4.5', '5', '5.6', '6.3', '7.1', '8', '9', '10', '11']
 
 const router = useRouter()
-const settings = ref({ photoCount: 4, countdown: 5, captureInterval: 1, postCapturePreview: 2, dslrIso: 'auto', dslrShutterSpeed: 'auto', dslrAperture: 'auto', dslrFocusMode: 'auto', organizer: '', contactInfo: '', apiRateLimitAdmin: 500, apiRateLimitShare: 300, bwLimitAdmin: 1000, bwLimitShare: 100, lockoutDuration: 5 })
-const originalSettings = ref({ photoCount: 4, countdown: 5, captureInterval: 1, postCapturePreview: 2, dslrIso: 'auto', dslrShutterSpeed: 'auto', dslrAperture: 'auto', dslrFocusMode: 'auto', organizer: '', contactInfo: '', apiRateLimitAdmin: 500, apiRateLimitShare: 300, bwLimitAdmin: 1000, bwLimitShare: 100, lockoutDuration: 5 })
+const settings = ref({ photoCount: 4, countdown: 5, captureInterval: 1, postCapturePreview: 2, dslrIso: 'auto', dslrShutterSpeed: 'auto', dslrAperture: 'auto', dslrFocusMode: 'auto', organizer: '', contactInfo: '', apiRateLimitAdmin: 500, apiRateLimitShare: 300, bwLimitAdmin: 1000, bwLimitShare: 100, lockoutDuration: 5, remotePreviewMaxViewers: 3 })
+const originalSettings = ref({ photoCount: 4, countdown: 5, captureInterval: 1, postCapturePreview: 2, dslrIso: 'auto', dslrShutterSpeed: 'auto', dslrAperture: 'auto', dslrFocusMode: 'auto', organizer: '', contactInfo: '', apiRateLimitAdmin: 500, apiRateLimitShare: 300, bwLimitAdmin: 1000, bwLimitShare: 100, lockoutDuration: 5, remotePreviewMaxViewers: 3 })
 const serverInfo = ref({ domain: 'Not set', path: '/' })
 
 const globalMessages = ref({

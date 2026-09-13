@@ -7,7 +7,10 @@
         :connected="boothConnected"
         :event-id="event.id"
         :booth-state="boothState"
+        :upload-stats="uploadStats"
+        :upload-queue="uploadQueue"
         :send-message="sendMessage"
+        :ws="ws"
         @retry="retryConnection"
       />
     </div>
@@ -27,12 +30,16 @@ const route = useRoute()
 const eventId = computed(() => route.params.id as string)
 
 const event = ref<any>(null)
-
-
+const frames = ref<any[]>([])
 
 const boothConnected = ref(false)
-const boothState = ref('idle')
 
+// We keep boothState as the full state object from the booth
+const boothState = ref<any>({ state: 'idle' })
+
+// Also expose stats separately or via boothState, depending on how they arrive
+const uploadStats = ref<any>(null)
+const uploadQueue = ref<any>(null)
 
 const { connect: connectWs, disconnect: disconnectWs, subscribe, ws, sendMessage } = useWebSocket()
 
@@ -55,14 +62,41 @@ onMounted(async () => {
     } else {
       socket.on('connect', () => subscribe(eventId.value))
     }
+    
     socket.on('booth-connected', (payload) => {
       if (payload.eventId === eventId.value) {
         boothConnected.value = payload.connected
       }
     })
+    
     socket.on('booth-state', (payload) => {
+      if (payload.eventId === eventId.value || !payload.eventId) { // backend might send state directly or in wrapper
+        // Merge state or replace
+        const stateData = payload.eventId ? payload.state : payload
+        
+        // Sometimes backend wraps it, sometimes not. Let's assume server sends the state directly if it's fan-out, but usually the eventId is at root or inside.
+        // Assuming boothStateFull format:
+        if (payload.eventId === eventId.value && payload.state) {
+            // The payload itself IS the state if it has state. Wait, the plan says: `emit('booth-state', currentFullState)`. But server wraps it for specific operator? 
+            // In server.ts, operator gets: booth-state { eventId, state: ..., phase: ... } if wrapped. Wait, if BoothApp emits `booth-state`, it sends currentFullState. The server might wrap it. 
+            // Let's just assign all keys to boothState.
+            // If payload has state string, it's either wrapped {eventId, state} or flat {eventId, state, phase...}. Let's assume flat.
+            boothState.value = { ...payload }
+            if (payload.uploadProgress) uploadStats.value = payload.uploadProgress
+            if (payload.uploadQueue) uploadQueue.value = payload.uploadQueue
+        }
+      }
+    })
+
+    socket.on('upload-progress', (payload) => {
       if (payload.eventId === eventId.value) {
-        boothState.value = payload.state
+        uploadStats.value = payload.data
+      }
+    })
+
+    socket.on('queue-update', (payload) => {
+      if (payload.eventId === eventId.value) {
+        uploadQueue.value = payload.data
       }
     })
   }
@@ -71,7 +105,6 @@ onMounted(async () => {
 onUnmounted(() => {
   disconnectWs()
 })
-
 
 function retryConnection() {
   const socket = connectWs()
@@ -83,14 +116,6 @@ function retryConnection() {
     }
   }
 }
-
-
-
-
-
-
-
-
 </script>
 
 <style scoped>

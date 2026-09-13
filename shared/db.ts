@@ -146,6 +146,7 @@ try { db.exec(`ALTER TABLE global_settings ADD COLUMN api_rate_limit_share INTEG
 try { db.exec(`ALTER TABLE global_settings ADD COLUMN bw_limit_admin INTEGER NOT NULL DEFAULT 1000`) } catch (e: any) { if (!e.message.includes("duplicate column name")) throw e; } // in MB/15m
 try { db.exec(`ALTER TABLE global_settings ADD COLUMN bw_limit_share INTEGER NOT NULL DEFAULT 100`) } catch (e: any) { if (!e.message.includes("duplicate column name")) throw e; } // in MB/15m
 try { db.exec(`ALTER TABLE global_settings ADD COLUMN lockout_duration INTEGER NOT NULL DEFAULT 5`) } catch (e: any) { if (!e.message.includes("duplicate column name")) throw e; } // in minutes
+try { db.exec(`ALTER TABLE global_settings ADD COLUMN remote_preview_max_viewers INTEGER NOT NULL DEFAULT 3`) } catch (e: any) { if (!e.message.includes("duplicate column name")) throw e; }
 
 try { db.exec(`ALTER TABLE camera_settings ADD COLUMN dslr_whitebalance_kelvin INTEGER NOT NULL DEFAULT 5200`) } catch (e: any) { if (!e.message.includes("duplicate column name")) throw e; }
 
@@ -562,8 +563,8 @@ export function restoreSession(sessionId: string) {
 
 const getDefaultsStmt = db.prepare('SELECT * FROM global_settings WHERE id = 1')
 const upsertDefaultsStmt = db.prepare(`
-  INSERT INTO global_settings (id, photo_count, countdown, capture_interval, post_capture_preview, dslr_iso, dslr_shutterspeed, dslr_aperture, dslr_focus_mode, dslr_whitebalance, dslr_whitebalance_kelvin, organizer, contact_info, api_rate_limit_admin, api_rate_limit_share, bw_limit_admin, bw_limit_share, lockout_duration)
-  VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  INSERT INTO global_settings (id, photo_count, countdown, capture_interval, post_capture_preview, dslr_iso, dslr_shutterspeed, dslr_aperture, dslr_focus_mode, dslr_whitebalance, dslr_whitebalance_kelvin, organizer, contact_info, api_rate_limit_admin, api_rate_limit_share, bw_limit_admin, bw_limit_share, lockout_duration, remote_preview_max_viewers)
+  VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   ON CONFLICT(id) DO UPDATE SET
     photo_count = excluded.photo_count,
     countdown = excluded.countdown,
@@ -581,7 +582,8 @@ const upsertDefaultsStmt = db.prepare(`
     api_rate_limit_share = excluded.api_rate_limit_share,
     bw_limit_admin = excluded.bw_limit_admin,
     bw_limit_share = excluded.bw_limit_share,
-    lockout_duration = excluded.lockout_duration
+    lockout_duration = excluded.lockout_duration,
+    remote_preview_max_viewers = excluded.remote_preview_max_viewers
 `)
 
 export function getGlobalSettings() {
@@ -604,11 +606,12 @@ export function getGlobalSettings() {
     bwLimitAdmin: row?.bw_limit_admin ?? 1000,
     bwLimitShare: row?.bw_limit_share ?? 100,
     lockoutDuration: row?.lockout_duration ?? 5,
+    remotePreviewMaxViewers: row?.remote_preview_max_viewers ?? 3,
   }
 }
 
-export function updateGlobalSettings(settings: { photoCount: number; countdown: number; captureInterval: number; postCapturePreview: number; dslrIso: string; dslrShutterSpeed: string; dslrAperture: string; dslrFocusMode?: string; dslrWhiteBalance?: string; dslrWhiteBalanceKelvin?: number; organizer?: string; contactInfo?: string; apiRateLimitAdmin?: number; apiRateLimitShare?: number; bwLimitAdmin?: number; bwLimitShare?: number; lockoutDuration?: number }) {
-  upsertDefaultsStmt.run(settings.photoCount, settings.countdown, settings.captureInterval, settings.postCapturePreview, settings.dslrIso, settings.dslrShutterSpeed, settings.dslrAperture, settings.dslrFocusMode ?? 'auto', settings.dslrWhiteBalance ?? 'auto', settings.dslrWhiteBalanceKelvin ?? 5200, settings.organizer ?? '', settings.contactInfo ?? '', settings.apiRateLimitAdmin ?? 500, settings.apiRateLimitShare ?? 300, settings.bwLimitAdmin ?? 1000, settings.bwLimitShare ?? 100, settings.lockoutDuration ?? 5)
+export function updateGlobalSettings(settings: { photoCount: number; countdown: number; captureInterval: number; postCapturePreview: number; dslrIso: string; dslrShutterSpeed: string; dslrAperture: string; dslrFocusMode?: string; dslrWhiteBalance?: string; dslrWhiteBalanceKelvin?: number; organizer?: string; contactInfo?: string; apiRateLimitAdmin?: number; apiRateLimitShare?: number; bwLimitAdmin?: number; bwLimitShare?: number; lockoutDuration?: number; remotePreviewMaxViewers?: number }) {
+  upsertDefaultsStmt.run(settings.photoCount, settings.countdown, settings.captureInterval, settings.postCapturePreview, settings.dslrIso, settings.dslrShutterSpeed, settings.dslrAperture, settings.dslrFocusMode ?? 'auto', settings.dslrWhiteBalance ?? 'auto', settings.dslrWhiteBalanceKelvin ?? 5200, settings.organizer ?? '', settings.contactInfo ?? '', settings.apiRateLimitAdmin ?? 500, settings.apiRateLimitShare ?? 300, settings.bwLimitAdmin ?? 1000, settings.bwLimitShare ?? 100, settings.lockoutDuration ?? 5, settings.remotePreviewMaxViewers ?? 3)
   logger.info('Global defaults updated', settings)
 }
 

@@ -1355,7 +1355,7 @@ router.get('/settings/defaults', requireRole('admin'), (req: Request, res: Respo
 })
 
 router.put('/settings/defaults', requireRole('admin'), (req: Request, res: Response) => {
-  const { photoCount, countdown, captureInterval, postCapturePreview, dslrIso, dslrShutterSpeed, dslrAperture, dslrFocusMode, dslrWhiteBalance, dslrWhiteBalanceKelvin, organizer, contactInfo, apiRateLimitAdmin, apiRateLimitShare, bwLimitAdmin, bwLimitShare, lockoutDuration } = req.body
+  const { photoCount, countdown, captureInterval, postCapturePreview, dslrIso, dslrShutterSpeed, dslrAperture, dslrFocusMode, dslrWhiteBalance, dslrWhiteBalanceKelvin, organizer, contactInfo, apiRateLimitAdmin, apiRateLimitShare, bwLimitAdmin, bwLimitShare, lockoutDuration, remotePreviewMaxViewers } = req.body
   const settings = {
     photoCount: Math.max(1, Math.min(4, photoCount ?? 4)),
     countdown: Math.max(3, Math.min(10, countdown ?? 5)),
@@ -1374,6 +1374,7 @@ router.put('/settings/defaults', requireRole('admin'), (req: Request, res: Respo
     bwLimitAdmin: parseInt(bwLimitAdmin) || 1000,
     bwLimitShare: parseInt(bwLimitShare) || 100,
     lockoutDuration: parseInt(lockoutDuration) || 5,
+    remotePreviewMaxViewers: Math.max(1, Math.min(20, parseInt(remotePreviewMaxViewers) || 3))
   }
   updateGlobalSettings(settings)
   res.json({ success: true, settings })

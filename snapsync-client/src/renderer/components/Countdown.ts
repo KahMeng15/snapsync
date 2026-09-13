@@ -15,12 +15,22 @@ export class CountdownUI {
     this.overlay.appendChild(this.messageEl)
   }
 
-  async play(seconds: number, audioCtx: AudioContext, onPrep?: () => void, pauseCheck?: () => Promise<void>, prepAt = 1, message?: string | null): Promise<void> {
+  async play(seconds: number, audioCtx: AudioContext, onPrep?: () => void, pauseCheck?: () => Promise<void>, prepAt = 1, message?: string | null, signal?: AbortSignal, onTick?: (tick: number) => void): Promise<void> {
+    const cleanup = () => {
+      this.countdownEl.textContent = ''
+      this.countdownEl.style.opacity = '0'
+      this.messageEl.textContent = ''
+      if (onTick) onTick(0)
+    }
+
     this.messageEl.textContent = message || ''
     const prepTick = Math.ceil(prepAt)
     for (let i = seconds; i > 0; i--) {
+      if (signal?.aborted) return cleanup()
       if (pauseCheck) await pauseCheck()
+      if (signal?.aborted) return cleanup()
       this.countdownEl.textContent = String(i)
+      if (onTick) onTick(i)
       this.countdownEl.style.opacity = '1'
       this.countdownEl.style.transform = 'scale(1.2)'
 
@@ -31,13 +41,13 @@ export class CountdownUI {
       }
 
       await this.delay(500, pauseCheck)
+      if (signal?.aborted) return cleanup()
       this.countdownEl.style.transform = 'scale(1)'
       await this.delay(500, pauseCheck)
+      if (signal?.aborted) return cleanup()
     }
 
-    this.countdownEl.textContent = ''
-    this.countdownEl.style.opacity = '0'
-    this.messageEl.textContent = ''
+    cleanup()
   }
 
   private playBeep(audioCtx: AudioContext, frequency: number) {

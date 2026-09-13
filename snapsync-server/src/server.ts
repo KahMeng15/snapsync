@@ -20,9 +20,7 @@ import { authMiddleware } from './middleware/authMiddleware'
 import { errorHandler } from './middleware/errorHandler'
 import { requestLogger } from './middleware/requestLogger'
 import { csrfProtection, setCsrfToken } from './middleware/csrfMiddleware'
-import { config, projectRoot } from '@snapsync/shared'
-import { logger } from '@snapsync/shared'
-import { getEventByOtp } from '@snapsync/shared'
+import { config, projectRoot, logger, getEventByOtp, getGlobalSettings } from '@snapsync/shared'
 
 const app = express()
 
@@ -104,12 +102,42 @@ app.get('/share/:token', (req, res) => {
 app.use('/api', apiRouter)
 
 
+export interface BoothStateFull {
+  state: 'idle' | 'live' | 'capturing' | 'preview' | 'paused'
+  phase?: 'countdown' | 'taking-photo' | 'post-photo-preview' | 'post-session'
+  shotCurrent?: number
+  shotTotal?: number
+  countdownValue?: number
+  sessionId?: string
+  sessionPhotoPaths?: string[]
+  shareUrl?: string
+  uploadProgress?: {
+    percent: number
+    speed?: string
+    eta?: string
+    elapsed?: string
+  }
+  uploadQueue?: {
+    uploading: number
+    queued: number
+    uploadedSessions: number
+    uploadedImages: number
+  }
+}
+
 // Track booth sockets per event
 const boothSockets = new Map<string, Set<string>>()
 const socketEventMap = new Map<string, string>()
 
 // Track operator subscriptions per event
 const operatorSubscriptions = new Map<string, Set<string>>()
+
+// Caches for late-joining operators
+const boothStateCache = new Map<string, BoothStateFull>()
+const boothUploadCache = new Map<string, BoothStateFull['uploadProgress'] & { queue?: BoothStateFull['uploadQueue'] }>()
+
+// Track preview stream viewers per event
+const previewViewers = new Map<string, Set<string>>()
 
 io.use((socket, next) => {
   const token = socket.handshake.auth.token
@@ -148,10 +176,25 @@ io.on('connection', (socket) => {
 
       const hasBooth = boothSockets.has(eventId) && boothSockets.get(eventId)!.size > 0
       socket.emit('booth-connected', { eventId, connected: hasBooth })
+      
+      const cachedState = boothStateCache.get(eventId)
+      if (cachedState) {
+        socket.emit('booth-state', { ...cachedState, eventId })
+      }
+      const cachedUpload = boothUploadCache.get(eventId)
+      if (cachedUpload) {
+        const { queue, ...progress } = cachedUpload
+        if (Object.keys(progress).length > 0) socket.emit('upload-progress', { ...progress, eventId })
+        if (queue) socket.emit('queue-update', { ...queue, eventId })
+      }
     })
 
     socket.on('unsubscribe', (eventId: string) => {
       operatorSubscriptions.get(eventId)?.delete(socket.id)
+      previewViewers.get(eventId)?.delete(socket.id)
+      if (previewViewers.get(eventId)?.size === 0) {
+        forwardToBooth(eventId, { type: 'stop-preview-stream' })
+      }
       if (socket.data.subscribedEvents) {
         socket.data.subscribedEvents = socket.data.subscribedEvents.filter((e: string) => e !== eventId)
       }
@@ -175,6 +218,13 @@ io.on('connection', (socket) => {
 
     socket.on('booth-pause', (data: { eventId: string; paused: boolean }) => {
       forwardToBooth(data.eventId, { type: 'booth-pause', paused: data.paused })
+      
+      const subs = operatorSubscriptions.get(data.eventId)
+      if (subs) {
+        for (const sid of subs) {
+          if (sid !== socket.id) io.to(sid).emit('booth-state', { state: data.paused ? 'paused' : 'idle', eventId: data.eventId })
+        }
+      }
     })
 
     socket.on('booth-capture', (data: { eventId: string }) => {
@@ -187,6 +237,56 @@ io.on('connection', (socket) => {
 
     socket.on('booth-go-home', (data: { eventId: string }) => {
       forwardToBooth(data.eventId, { type: 'go-home' })
+    })
+
+    socket.on('booth-stop', (data: { eventId: string }) => {
+      forwardToBooth(data.eventId, { type: 'stop' })
+    })
+
+    socket.on('booth-cancel-countdown', (data: { eventId: string }) => {
+      forwardToBooth(data.eventId, { type: 'cancel-countdown' })
+    })
+
+    socket.on('booth-retake', (data: { eventId: string, indices: number[] }) => {
+      forwardToBooth(data.eventId, { type: 'retake', indices: data.indices })
+    })
+
+    socket.on('booth-show-qr', (data: { eventId: string }) => {
+      forwardToBooth(data.eventId, { type: 'show-qr' })
+    })
+
+    socket.on('booth-hide-qr', (data: { eventId: string }) => {
+      forwardToBooth(data.eventId, { type: 'hide-qr' })
+    })
+
+    socket.on('request-preview', async (data: { eventId: string }) => {
+      const eventId = data.eventId
+      if (!previewViewers.has(eventId)) {
+        previewViewers.set(eventId, new Set())
+      }
+      
+      const viewers = previewViewers.get(eventId)!
+      const settings = await getGlobalSettings()
+      
+      if (viewers.size >= settings.remotePreviewMaxViewers) {
+        socket.emit('preview-capacity')
+        return
+      }
+      
+      const isFirst = viewers.size === 0
+      viewers.add(socket.id)
+      
+      if (isFirst) {
+        forwardToBooth(eventId, { type: 'start-preview-stream' })
+      }
+    })
+
+    socket.on('stop-preview', (data: { eventId: string }) => {
+      const eventId = data.eventId
+      previewViewers.get(eventId)?.delete(socket.id)
+      if (previewViewers.get(eventId)?.size === 0) {
+        forwardToBooth(eventId, { type: 'stop-preview-stream' })
+      }
     })
 
     socket.on('resolve-booth-error', (data: { eventId: string; errorId: string; action: string }) => {
@@ -204,6 +304,13 @@ io.on('connection', (socket) => {
       if (socket.data.subscribedEvents) {
         for (const eventId of socket.data.subscribedEvents) {
           operatorSubscriptions.get(eventId)?.delete(socket.id)
+          
+          if (previewViewers.has(eventId)) {
+            previewViewers.get(eventId)?.delete(socket.id)
+            if (previewViewers.get(eventId)?.size === 0) {
+              forwardToBooth(eventId, { type: 'stop-preview-stream' })
+            }
+          }
         }
       }
     })
@@ -230,11 +337,32 @@ io.on('connection', (socket) => {
       }
     })
 
-    socket.on('booth-state', (data: { state: string }) => {
+    socket.on('booth-state', (data: BoothStateFull) => {
+      boothStateCache.set(eventId, data)
       const subs = operatorSubscriptions.get(eventId)
       if (subs) {
         for (const sid of subs) {
           io.to(sid).emit('booth-state', { ...data, eventId })
+        }
+      }
+    })
+
+    socket.on('upload-progress', (data: BoothStateFull['uploadProgress']) => {
+      const existing = boothUploadCache.get(eventId) || {} as any
+      boothUploadCache.set(eventId, { ...existing, ...data })
+      const subs = operatorSubscriptions.get(eventId)
+      if (subs) {
+        for (const sid of subs) {
+          io.to(sid).emit('upload-progress', { ...data, eventId })
+        }
+      }
+    })
+
+    socket.on('preview-chunk', (chunk: Buffer) => {
+      const viewers = previewViewers.get(eventId)
+      if (viewers) {
+        for (const sid of viewers) {
+          io.to(sid).emit('preview-chunk', chunk)
         }
       }
     })
@@ -266,7 +394,9 @@ io.on('connection', (socket) => {
       }
     })
 
-    socket.on('queue-update', (data: { depth: number; offline?: number }) => {
+    socket.on('queue-update', (data: BoothStateFull['uploadQueue']) => {
+      const existing = boothUploadCache.get(eventId) || {} as any
+      boothUploadCache.set(eventId, { ...existing, queue: data })
       const subs = operatorSubscriptions.get(eventId)
       if (subs) {
         for (const sid of subs) {
@@ -280,6 +410,9 @@ io.on('connection', (socket) => {
       boothSockets.get(eventId)?.delete(socket.id)
       if (boothSockets.get(eventId)?.size === 0) {
         boothSockets.delete(eventId)
+        boothStateCache.delete(eventId)
+        boothUploadCache.delete(eventId)
+        previewViewers.delete(eventId)
       }
       socketEventMap.delete(socket.id)
       notifyBoothConnected(eventId, false)

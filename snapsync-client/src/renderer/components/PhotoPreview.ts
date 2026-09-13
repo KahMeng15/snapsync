@@ -380,6 +380,14 @@ export class PhotoPreview {
     this.qrOverlay.appendChild(box)
   }
 
+  public async triggerShowQR(url: string) {
+    await this.showQR(url)
+  }
+
+  public hideQR() {
+    this.qrOverlay.style.display = 'none'
+  }
+
   hide() {
     this.overlay.style.display = 'none'
     this.qrOverlay.style.display = 'none'

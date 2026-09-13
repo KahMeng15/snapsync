@@ -13,11 +13,6 @@ type CameraMode = 'webcam' | 'dslr'
 
 interface BoothStateFull {
   state: BoothState
-  phase?: 'countdown' | 'taking-photo' | 'post-photo-preview' | 'post-session'
-  countdown?: number
-  currentShot?: number
-  totalShots?: number
-  sessionPhotoPaths?: string[]
   shareUrl: string
   totalSessionsUploaded: number
   totalImagesUploaded: number
@@ -789,14 +784,6 @@ export class BoothApp {
       this.goHome()
     } else if (cmd.type === 'reshot') {
       if (this.isLive && !this.isCapturing) this.startCapture()
-    } else if (cmd.type === 'cancel-countdown') {
-      this.sessionAbortController?.abort()
-      this.hideCaptureProgress()
-      this.pauseBtn.style.display = 'none'
-      this.isCapturing = false
-      this._state = 'live'
-      this.currentPaths = []
-      this.emitBoothStateFull()
     } else if (cmd.type === 'stop') {
       this.sessionAbortController?.abort()
       if (this.currentPaths.length > 0) {
@@ -976,10 +963,8 @@ export class BoothApp {
     }
     this.updateStartBtn()
 
-    document.addEventListener('booth-socket-connect', () => {
-      this.updateStartBtn()
-      this.emitBoothStateFull()
-    })
+    document.addEventListener('booth-socket-connect', () => this.updateStartBtn())
+    document.addEventListener('booth-socket-connect', () => this.updateStartBtn())
     document.addEventListener('booth-socket-disconnect', () => this.updateStartBtn())
     this.updateLandingText()
   }
@@ -1011,10 +996,7 @@ export class BoothApp {
     }
     const state = this.isPaused ? 'paused' : this._state
     this.currentFullState.state = state
-    if (this.settingsData?.photoCount) {
-      this.currentFullState.totalShots = this.settingsData.photoCount
-    }
-    try { boothSocket?.emit('booth-state', this.currentFullState) } catch {}
+    try { boothSocket?.emit('booth-state-full', this.currentFullState) } catch {}
   }
 
   // -------------------------------------------------------------------------
@@ -1046,26 +1028,6 @@ export class BoothApp {
 
   private startPreviewStream() {
     if (this.previewStreamRecorder) return
-
-    let srcW = 640
-    let srcH = 480
-    if (this.cameraMode === 'dslr' && this.dslrPreview.element.naturalWidth) {
-      srcW = this.dslrPreview.element.naturalWidth
-      srcH = this.dslrPreview.element.naturalHeight
-    } else if (this.cameraMode === 'webcam' && this.webcamPreview.videoWidth) {
-      srcW = this.webcamPreview.videoWidth
-      srcH = this.webcamPreview.videoHeight
-    }
-
-    if (srcH > 0 && srcW > 0) {
-      const ratio = srcW / srcH
-      this.previewStreamCanvas.width = Math.round(480 * ratio)
-      this.previewStreamCanvas.height = 480
-    } else {
-      this.previewStreamCanvas.width = 640
-      this.previewStreamCanvas.height = 480
-    }
-
     const stream = this.previewStreamCanvas.captureStream(15)
     this.previewStreamRecorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp8', videoBitsPerSecond: 200000 })
     this.previewStreamRecorder.ondataavailable = (e) => {
@@ -1079,12 +1041,10 @@ export class BoothApp {
       if (!this.previewStreamRecorder || this.previewStreamRecorder.state === 'inactive') return
       const ctx = this.previewStreamCanvas.getContext('2d')
       if (ctx) {
-        const w = this.previewStreamCanvas.width
-        const h = this.previewStreamCanvas.height
         if (this.cameraMode === 'dslr') {
-          try { ctx.drawImage(this.dslrPreview.element, 0, 0, w, h) } catch {}
+          try { ctx.drawImage(this.dslrPreview.element, 0, 0, 640, 480) } catch {}
         } else {
-          try { ctx.drawImage(this.webcamPreview, 0, 0, w, h) } catch {}
+          try { ctx.drawImage(this.webcamPreview, 0, 0, 640, 480) } catch {}
         }
       }
       this.previewStreamDrawLoop = requestAnimationFrame(draw)
@@ -1258,11 +1218,6 @@ export class BoothApp {
       this.pendingRetakes = null
       this._state = 'idle'
       this.currentFullState.shareUrl = ''
-      this.currentFullState.phase = undefined
-      this.currentFullState.countdown = undefined
-      this.currentFullState.currentShot = undefined
-      this.currentFullState.totalShots = undefined
-      this.currentFullState.sessionPhotoPaths = undefined
       this.emitBoothStateFull()
       
       this.isPauseActive = false
@@ -1373,21 +1328,8 @@ export class BoothApp {
       } : undefined
 
       const countdownMsg = this.pickMessage('countdown')
-      await this.countdown.play(this.settingsData.countdown, audioCtx, onPrep, () => this.waitIfPaused(), offset, countdownMsg, signal, (tick) => {
-        this.emitBoothStateFull({
-          phase: 'countdown',
-          currentShot: i + 1,
-          totalShots: photoCount,
-          countdown: tick === 0 ? undefined : tick
-        })
-      })
+      await this.countdown.play(this.settingsData.countdown, audioCtx, onPrep, () => this.waitIfPaused(), offset, countdownMsg, signal)
       if (signal.aborted || !this.isCapturing) { audioCtx.close(); return }
-      
-      this.emitBoothStateFull({
-        phase: 'taking-photo',
-        countdown: undefined
-      })
-      
       const tCountdownEnd = Date.now()
       console.log(`[BoothApp] ⏱ COUNTDOWN = 0 at t+${tCountdownEnd - tCountdownStart} ms`)
 
@@ -1426,7 +1368,7 @@ export class BoothApp {
         this.stateDisplay.textContent = ''
 
         if (this.settingsData.postCapturePreview > 0) {
-          await this.showPostCapture(result.path, this.settingsData.postCapturePreview, i + 1, photoCount, signal)
+          await this.showPostCapture(result.path, this.settingsData.postCapturePreview)
         }
         await this.waitIfPaused()
         if (signal.aborted || !this.isCapturing) { audioCtx.close(); return }
@@ -1449,7 +1391,7 @@ export class BoothApp {
         }
 
         if (i < photoCount - 1 && this.settingsData.captureInterval > 0) {
-          await this.delayWithCountdown(this.settingsData.captureInterval, 'time-gap', i + 1, photoCount, signal)
+          await this.delay(this.settingsData.captureInterval * 1000)
           await this.waitIfPaused()
           if (signal.aborted || !this.isCapturing) { audioCtx.close(); return }
         }
@@ -1574,20 +1516,8 @@ export class BoothApp {
       } : undefined
 
       const countdownMsg = this.pickMessage('countdown')
-      await this.countdown.play(this.settingsData.countdown, audioCtx, onPrep, () => this.waitIfPaused(), offset, countdownMsg, signal, (tick) => {
-        this.emitBoothStateFull({
-          phase: 'countdown',
-          currentShot: targetIndex + 1,
-          totalShots: this.settingsData.photoCount,
-          countdown: tick === 0 ? undefined : tick
-        })
-      })
+      await this.countdown.play(this.settingsData.countdown, audioCtx, onPrep, () => this.waitIfPaused(), offset, countdownMsg, signal)
       if (signal.aborted || !this.isCapturing) { audioCtx.close(); return }
-      
-      this.emitBoothStateFull({
-        phase: 'taking-photo',
-        countdown: undefined
-      })
 
       let result: { success: boolean; path?: string; error?: string }
 
@@ -1642,7 +1572,7 @@ export class BoothApp {
         }
 
         if (this.settingsData.postCapturePreview > 0) {
-          await this.showPostCapture(result.path, this.settingsData.postCapturePreview, targetIndex + 1, this.settingsData.photoCount, signal)
+          await this.showPostCapture(result.path, this.settingsData.postCapturePreview)
         }
       }
 
@@ -1658,9 +1588,7 @@ export class BoothApp {
           }
         }
         
-        if (this.settingsData.captureInterval > 0) {
-          await this.delayWithCountdown(this.settingsData.captureInterval, 'time-gap', targetIndex + 1, this.settingsData.photoCount, signal)
-        }
+        await new Promise((r) => setTimeout(r, this.settingsData.captureInterval * 1000))
         if (signal.aborted || !this.isCapturing) { audioCtx.close(); return }
       }
     }
@@ -1697,7 +1625,7 @@ export class BoothApp {
     this.pauseBtn.style.display = 'none'
     this.isCapturing = false
     this._state = 'preview'
-    this.emitBoothStateFull({ phase: 'post-session', sessionPhotoPaths: paths })
+    this.emitBoothStateFull()
     
     if (!options?.archived) {
       this.photoPreview.show(paths, null, this.settingsData.serverUrl, this.settingsData.otp, sessionId, this.sessionMessages.postSession)
@@ -1861,19 +1789,19 @@ export class BoothApp {
     await this.delay(250)
   }
 
-  private async showPostCapture(path: string, duration: number, currentShot: number, totalShots: number, signal?: AbortSignal) {
+  private async showPostCapture(path: string, duration: number) {
     this.postCaptureEl.src = path
     this.postCaptureEl.style.display = 'block'
 
     if (this.cameraMode === 'dslr') {
-      await this.delayWithCountdown(duration, 'post-photo-preview', currentShot, totalShots, signal)
+      await this.delay(duration * 1000)
       // Keep the taken photo frozen until the live preview stream resumes
       // (the between-shots code hides postCaptureEl when the first frame arrives)
       return
     }
 
     this.webcamPreview.style.opacity = '0'
-    await this.delayWithCountdown(duration, 'post-photo-preview', currentShot, totalShots, signal)
+    await this.delay(duration * 1000)
     this.webcamPreview.style.opacity = '1'
     this.postCaptureEl.style.display = 'none'
     this.postCaptureEl.src = ''
@@ -1881,26 +1809,6 @@ export class BoothApp {
 
   private delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms))
-  }
-
-  private async delayWithCountdown(
-    seconds: number, 
-    phase: 'post-photo-preview' | 'time-gap',
-    currentShot: number,
-    totalShots: number,
-    signal?: AbortSignal
-  ): Promise<void> {
-    for (let i = seconds; i > 0; i--) {
-      if (signal?.aborted) return
-      this.emitBoothStateFull({
-        phase: phase === 'time-gap' ? 'countdown' : phase,
-        currentShot,
-        totalShots,
-        countdown: i
-      })
-      await this.delay(1000)
-    }
-    this.emitBoothStateFull({ countdown: undefined })
   }
 
   private updateUploadStatusBar(data: { pending: number; failed: number; jobs?: any[] }) {

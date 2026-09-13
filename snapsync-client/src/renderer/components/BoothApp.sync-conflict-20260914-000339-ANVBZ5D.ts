@@ -11,18 +11,6 @@ import { createButton, createModal, createInput, createSpinner } from '../utils/
 type BoothState = 'idle' | 'live' | 'capturing' | 'preview' | 'paused'
 type CameraMode = 'webcam' | 'dslr'
 
-interface BoothStateFull {
-  state: BoothState
-  phase?: 'countdown' | 'taking-photo' | 'post-photo-preview' | 'post-session'
-  countdown?: number
-  currentShot?: number
-  totalShots?: number
-  sessionPhotoPaths?: string[]
-  shareUrl: string
-  totalSessionsUploaded: number
-  totalImagesUploaded: number
-}
-
 export class BoothApp {
   private container: HTMLElement
   private camera: CameraManager
@@ -62,17 +50,12 @@ export class BoothApp {
   private captureProgressText!: HTMLDivElement
   private captureProgressBars!: HTMLDivElement
 
-  private previewStreamCanvas!: HTMLCanvasElement
-  private previewStreamRecorder: MediaRecorder | null = null
-  private previewStreamDrawLoop: number | null = null
-
   private isCapturing = false
   private landingBrandEl: HTMLHeadingElement | null = null
   private landingSubtitleEl: HTMLParagraphElement | null = null
   private isLive = false
   private isTransitioning = false
   private isPaused = false
-  private cameraActive = false
   private cameraMode: CameraMode = 'webcam'
   private settingsData: {
     photoCount: number
@@ -99,9 +82,7 @@ export class BoothApp {
   private serverOnline = true
   private serverUrl = ''
   private _state: BoothState = 'idle'
-  private currentFullState: BoothStateFull = { state: 'idle', shareUrl: '', totalSessionsUploaded: 0, totalImagesUploaded: 0 }
   private currentSessionId: string | null = null
-  private sessionAbortController?: AbortController
 
   private updateLandingText() {
     if (this.landingBrandEl) {
@@ -155,15 +136,11 @@ export class BoothApp {
     // ------------------------------------------------------------------
     this.webcamPreview = document.createElement('video')
     Object.assign(this.webcamPreview.style, {
-      width: '100%', height: '100%', display: 'block', objectFit: 'contain'
+      width: '100%', height: '100%', display: 'block',
     })
     this.webcamPreview.autoplay = true
     this.webcamPreview.muted = true
     this.webcamPreview.playsInline = true
-    
-    this.previewStreamCanvas = document.createElement('canvas')
-    this.previewStreamCanvas.width = 640
-    this.previewStreamCanvas.height = 480
 
     // ------------------------------------------------------------------
     // Post-capture still preview (shared between modes)
@@ -776,43 +753,19 @@ export class BoothApp {
       const paused = (cmd as any).paused !== false
       this.isPaused = paused
       this.stateDisplay.textContent = paused ? 'PAUSED' : ''
-      this.emitBoothStateFull()
+      this.emitBoothState()
     } else if (cmd.type === 'pause') {
       this.isPaused = true
       this.stateDisplay.textContent = 'PAUSED'
-      this.emitBoothStateFull()
+      this.emitBoothState()
     } else if (cmd.type === 'resume') {
       this.isPaused = false
       this.stateDisplay.textContent = ''
-      this.emitBoothStateFull()
+      this.emitBoothState()
     } else if (cmd.type === 'go-home') {
       this.goHome()
     } else if (cmd.type === 'reshot') {
       if (this.isLive && !this.isCapturing) this.startCapture()
-    } else if (cmd.type === 'cancel-countdown') {
-      this.sessionAbortController?.abort()
-      this.hideCaptureProgress()
-      this.pauseBtn.style.display = 'none'
-      this.isCapturing = false
-      this._state = 'live'
-      this.currentPaths = []
-      this.emitBoothStateFull()
-    } else if (cmd.type === 'stop') {
-      this.sessionAbortController?.abort()
-      if (this.currentPaths.length > 0) {
-        this.uploadAndPreview({ archived: true }).catch(() => {})
-      }
-      this.goHome()
-    } else if (cmd.type === 'retake') {
-      this.retakePhotos((cmd as any).indices || [])
-    } else if (cmd.type === 'show-qr') {
-      this.photoPreview.triggerShowQR(this.currentFullState.shareUrl)
-    } else if (cmd.type === 'hide-qr') {
-      this.photoPreview.hideQR()
-    } else if (cmd.type === 'start-preview-stream') {
-      if (this.isLive) this.startPreviewStream()
-    } else if (cmd.type === 'stop-preview-stream') {
-      this.stopPreviewStream()
     } else if (cmd.type === 'resolve-error') {
       const errorId = (cmd as any).errorId
       const action = (cmd as any).action
@@ -875,9 +828,6 @@ export class BoothApp {
     window.snapsync?.onUploadComplete((data: any) => {
       if (data.success) {
         this.offlineIndicator.setOnline(true)
-        this.currentFullState.totalSessionsUploaded += 1
-        this.currentFullState.totalImagesUploaded += (data.photoCount || 0)
-        this.emitBoothStateFull()
         if (this.currentSessionId === data.sessionId) {
           this.currentSessionUploaded = true
           this.photoPreview.setOffline(false)
@@ -898,18 +848,14 @@ export class BoothApp {
       if (this.currentSessionId === data.sessionId) {
         this.photoPreview.updateProgress(data.percent, data.speed, data.elapsed, data.eta)
       }
-      try { boothSocket?.emit('upload-progress', data) } catch {}
     })
     window.snapsync?.onShareIdReady((data) => {
       if (this.currentSessionId === data.sessionId) {
         this.photoPreview.updateShareUrl(data.shareUrl)
-        this.currentFullState.shareUrl = data.shareUrl
-        this.emitBoothStateFull()
       }
     })
     window.snapsync?.onUploadQueueUpdate((data) => {
       this.updateUploadStatusBar(data)
-      try { boothSocket?.emit('queue-update', data) } catch {}
     })
     // IPC path: commands forwarded from Electron main process (via HTTP polling fallback)
     window.snapsync?.onBoothCommand((cmd) => {
@@ -976,10 +922,8 @@ export class BoothApp {
     }
     this.updateStartBtn()
 
-    document.addEventListener('booth-socket-connect', () => {
-      this.updateStartBtn()
-      this.emitBoothStateFull()
-    })
+    document.addEventListener('booth-socket-connect', () => this.updateStartBtn())
+    document.addEventListener('booth-socket-connect', () => this.updateStartBtn())
     document.addEventListener('booth-socket-disconnect', () => this.updateStartBtn())
     this.updateLandingText()
   }
@@ -1005,16 +949,9 @@ export class BoothApp {
     this.confirmModal.style.display = 'flex'
   }
 
-  private emitBoothStateFull(patch?: Partial<BoothStateFull>) {
-    if (patch) {
-      this.currentFullState = { ...this.currentFullState, ...patch }
-    }
+  private emitBoothState() {
     const state = this.isPaused ? 'paused' : this._state
-    this.currentFullState.state = state
-    if (this.settingsData?.photoCount) {
-      this.currentFullState.totalShots = this.settingsData.photoCount
-    }
-    try { boothSocket?.emit('booth-state', this.currentFullState) } catch {}
+    try { boothSocket?.emit('booth-state', { state }) } catch {}
   }
 
   // -------------------------------------------------------------------------
@@ -1044,67 +981,6 @@ export class BoothApp {
     }
   }
 
-  private startPreviewStream() {
-    if (this.previewStreamRecorder) return
-
-    let srcW = 640
-    let srcH = 480
-    if (this.cameraMode === 'dslr' && this.dslrPreview.element.naturalWidth) {
-      srcW = this.dslrPreview.element.naturalWidth
-      srcH = this.dslrPreview.element.naturalHeight
-    } else if (this.cameraMode === 'webcam' && this.webcamPreview.videoWidth) {
-      srcW = this.webcamPreview.videoWidth
-      srcH = this.webcamPreview.videoHeight
-    }
-
-    if (srcH > 0 && srcW > 0) {
-      const ratio = srcW / srcH
-      this.previewStreamCanvas.width = Math.round(480 * ratio)
-      this.previewStreamCanvas.height = 480
-    } else {
-      this.previewStreamCanvas.width = 640
-      this.previewStreamCanvas.height = 480
-    }
-
-    const stream = this.previewStreamCanvas.captureStream(15)
-    this.previewStreamRecorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp8', videoBitsPerSecond: 200000 })
-    this.previewStreamRecorder.ondataavailable = (e) => {
-      if (e.data.size > 0) {
-        try { boothSocket?.emit('preview-chunk', e.data) } catch {}
-      }
-    }
-    this.previewStreamRecorder.start(250)
-    
-    const draw = () => {
-      if (!this.previewStreamRecorder || this.previewStreamRecorder.state === 'inactive') return
-      const ctx = this.previewStreamCanvas.getContext('2d')
-      if (ctx) {
-        const w = this.previewStreamCanvas.width
-        const h = this.previewStreamCanvas.height
-        if (this.cameraMode === 'dslr') {
-          try { ctx.drawImage(this.dslrPreview.element, 0, 0, w, h) } catch {}
-        } else {
-          try { ctx.drawImage(this.webcamPreview, 0, 0, w, h) } catch {}
-        }
-      }
-      this.previewStreamDrawLoop = requestAnimationFrame(draw)
-    }
-    draw()
-  }
-
-  private stopPreviewStream() {
-    if (this.previewStreamRecorder) {
-      if (this.previewStreamRecorder.state !== 'inactive') {
-        this.previewStreamRecorder.stop()
-      }
-      this.previewStreamRecorder = null
-    }
-    if (this.previewStreamDrawLoop !== null) {
-      cancelAnimationFrame(this.previewStreamDrawLoop)
-      this.previewStreamDrawLoop = null
-    }
-  }
-
   // -------------------------------------------------------------------------
   // goLive
   // -------------------------------------------------------------------------
@@ -1129,7 +1005,7 @@ export class BoothApp {
 
       this.isLive = true
       this._state = 'live'
-      this.emitBoothStateFull()
+      this.emitBoothState()
       this.captureBtn.style.display = 'block'
       this.captureBtn.style.visibility = 'visible'
       this.statusBar.appendChild(this.captureBtn)
@@ -1160,14 +1036,11 @@ export class BoothApp {
     connectingOverlay.remove()
 
     if (!started) {
-      this.cameraActive = false
       const errMsg = this.dslrPreview.lastError ||
         'Camera liveview failed. Unplug and re-plug the USB cable, then try again.\n\n' +
         'If the problem persists, run in a terminal:\nkillall PTPCamera'
       console.error('[BoothApp] DSLR liveview failed — showing error overlay')
       this.showDslrError(errMsg)
-    } else {
-      this.cameraActive = true
     }
   }
 
@@ -1207,12 +1080,9 @@ export class BoothApp {
       if (settings.width && settings.height) {
         this.previewBox.style.aspectRatio = `${settings.width} / ${settings.height}`
       }
-      this.cameraActive = true
       console.log(`[BoothApp] startWebcamPreview() — stream active (${settings.width}x${settings.height})`)
     } else {
-      this.cameraActive = false
       console.error('[BoothApp] startWebcamPreview() — getUserMedia returned null stream')
-      this.showErrorOverlay('Webcam Failed', 'Could not access the webcam. Please check permissions or device connection.', 'error')
     }
     connectingOverlay.remove()
   }
@@ -1238,9 +1108,6 @@ export class BoothApp {
 
   private async goHome() {
     if (this.isTransitioning) return
-    this.sessionAbortController?.abort()
-    this.sessionAbortController = undefined
-    this.stopPreviewStream()
     this.isTransitioning = true
     try {
       this.updateLandingText()
@@ -1257,13 +1124,7 @@ export class BoothApp {
       this.isCapturing = false
       this.pendingRetakes = null
       this._state = 'idle'
-      this.currentFullState.shareUrl = ''
-      this.currentFullState.phase = undefined
-      this.currentFullState.countdown = undefined
-      this.currentFullState.currentShot = undefined
-      this.currentFullState.totalShots = undefined
-      this.currentFullState.sessionPhotoPaths = undefined
-      this.emitBoothStateFull()
+      this.emitBoothState()
       
       this.isPauseActive = false
       if (this.pauseResume) {
@@ -1321,7 +1182,6 @@ export class BoothApp {
 
   private async startCapture() {
     if (this.isCapturing || !this.isLive) return
-    if (!this.cameraActive) return
     
     if (this.pendingRetakes && this.pendingRetakes.length > 0) {
       const indices = this.pendingRetakes
@@ -1333,7 +1193,7 @@ export class BoothApp {
 
     this.isCapturing = true
     this._state = 'capturing'
-    this.emitBoothStateFull()
+    this.emitBoothState()
     this.captureBtn.style.visibility = 'hidden'
     this.pauseBtn.style.display = 'flex'
     this.stateDisplay.textContent = ''
@@ -1351,11 +1211,7 @@ export class BoothApp {
     this.currentPaths = paths
     const audioCtx = new AudioContext()
 
-    this.sessionAbortController = new AbortController()
-    const signal = this.sessionAbortController.signal
-
     for (let i = 0; i < photoCount; i++) {
-      if (signal.aborted) return
       this.captureProgressText.textContent = `Shot ${i + 1} of ${photoCount}`
 
       let prepDone = false
@@ -1373,21 +1229,8 @@ export class BoothApp {
       } : undefined
 
       const countdownMsg = this.pickMessage('countdown')
-      await this.countdown.play(this.settingsData.countdown, audioCtx, onPrep, () => this.waitIfPaused(), offset, countdownMsg, signal, (tick) => {
-        this.emitBoothStateFull({
-          phase: 'countdown',
-          currentShot: i + 1,
-          totalShots: photoCount,
-          countdown: tick === 0 ? undefined : tick
-        })
-      })
-      if (signal.aborted || !this.isCapturing) { audioCtx.close(); return }
-      
-      this.emitBoothStateFull({
-        phase: 'taking-photo',
-        countdown: undefined
-      })
-      
+      await this.countdown.play(this.settingsData.countdown, audioCtx, onPrep, () => this.waitIfPaused(), offset, countdownMsg)
+      if (!this.isCapturing) { audioCtx.close(); return }
       const tCountdownEnd = Date.now()
       console.log(`[BoothApp] ⏱ COUNTDOWN = 0 at t+${tCountdownEnd - tCountdownStart} ms`)
 
@@ -1413,8 +1256,6 @@ export class BoothApp {
         result = await this.camera.captureStill()
       }
 
-      if (signal.aborted) { audioCtx.close(); return }
-
       if (result?.success && result.path) {
         paths.push(result.path)
         // Webcam capture is instant so sound+flash happens here;
@@ -1426,10 +1267,10 @@ export class BoothApp {
         this.stateDisplay.textContent = ''
 
         if (this.settingsData.postCapturePreview > 0) {
-          await this.showPostCapture(result.path, this.settingsData.postCapturePreview, i + 1, photoCount, signal)
+          await this.showPostCapture(result.path, this.settingsData.postCapturePreview)
         }
         await this.waitIfPaused()
-        if (signal.aborted || !this.isCapturing) { audioCtx.close(); return }
+        if (!this.isCapturing) { audioCtx.close(); return }
 
         this.updateCaptureProgress(i + 1)
 
@@ -1449,9 +1290,9 @@ export class BoothApp {
         }
 
         if (i < photoCount - 1 && this.settingsData.captureInterval > 0) {
-          await this.delayWithCountdown(this.settingsData.captureInterval, 'time-gap', i + 1, photoCount, signal)
+          await this.delay(this.settingsData.captureInterval * 1000)
           await this.waitIfPaused()
-          if (signal.aborted || !this.isCapturing) { audioCtx.close(); return }
+          if (!this.isCapturing) { audioCtx.close(); return }
         }
       } else {
         const errMsg = result?.error || 'Unknown error'
@@ -1502,7 +1343,7 @@ export class BoothApp {
       this.pauseBtn.style.display = 'none'
       this.isCapturing = false
       this._state = 'live'
-      this.emitBoothStateFull()
+      this.emitBoothState()
     }
   }
 
@@ -1532,7 +1373,7 @@ export class BoothApp {
 
     this.isLive = true
     this._state = 'live'
-    this.emitBoothStateFull()
+    this.emitBoothState()
     
     this.captureBtn.style.display = 'block'
     this.captureBtn.style.visibility = 'visible'
@@ -1545,7 +1386,7 @@ export class BoothApp {
     if (this.isCapturing || indices.length === 0) return
     this.isCapturing = true
     this._state = 'capturing'
-    this.emitBoothStateFull()
+    this.emitBoothState()
     this.captureBtn.style.visibility = 'hidden'
     this.pauseBtn.style.display = 'flex'
     this.stateDisplay.textContent = ''
@@ -1553,11 +1394,7 @@ export class BoothApp {
     const audioCtx = new AudioContext()
     const totalRetakes = indices.length
 
-    this.sessionAbortController = new AbortController()
-    const signal = this.sessionAbortController.signal
-
     for (let i = 0; i < totalRetakes; i++) {
-      if (signal.aborted) return
       const targetIndex = indices[i]
       this.showCaptureProgress(i + 1, totalRetakes)
       this.captureProgressText.textContent = `Retake Photo ${targetIndex + 1}`
@@ -1574,20 +1411,8 @@ export class BoothApp {
       } : undefined
 
       const countdownMsg = this.pickMessage('countdown')
-      await this.countdown.play(this.settingsData.countdown, audioCtx, onPrep, () => this.waitIfPaused(), offset, countdownMsg, signal, (tick) => {
-        this.emitBoothStateFull({
-          phase: 'countdown',
-          currentShot: targetIndex + 1,
-          totalShots: this.settingsData.photoCount,
-          countdown: tick === 0 ? undefined : tick
-        })
-      })
-      if (signal.aborted || !this.isCapturing) { audioCtx.close(); return }
-      
-      this.emitBoothStateFull({
-        phase: 'taking-photo',
-        countdown: undefined
-      })
+      await this.countdown.play(this.settingsData.countdown, audioCtx, onPrep, () => this.waitIfPaused(), offset, countdownMsg)
+      if (!this.isCapturing) { audioCtx.close(); return }
 
       let result: { success: boolean; path?: string; error?: string }
 
@@ -1601,8 +1426,6 @@ export class BoothApp {
       } else {
         result = await this.camera.captureStill()
       }
-
-      if (signal.aborted) { audioCtx.close(); return }
 
       this.updateCaptureProgress(i + 1)
 
@@ -1642,7 +1465,7 @@ export class BoothApp {
         }
 
         if (this.settingsData.postCapturePreview > 0) {
-          await this.showPostCapture(result.path, this.settingsData.postCapturePreview, targetIndex + 1, this.settingsData.photoCount, signal)
+          await this.showPostCapture(result.path, this.settingsData.postCapturePreview)
         }
       }
 
@@ -1658,10 +1481,8 @@ export class BoothApp {
           }
         }
         
-        if (this.settingsData.captureInterval > 0) {
-          await this.delayWithCountdown(this.settingsData.captureInterval, 'time-gap', targetIndex + 1, this.settingsData.photoCount, signal)
-        }
-        if (signal.aborted || !this.isCapturing) { audioCtx.close(); return }
+        await new Promise((r) => setTimeout(r, this.settingsData.captureInterval * 1000))
+        if (!this.isCapturing) { audioCtx.close(); return }
       }
     }
 
@@ -1669,7 +1490,7 @@ export class BoothApp {
     await this.uploadAndPreview()
   }
 
-  private async uploadAndPreview(options?: { archived?: boolean }) {
+  private async uploadAndPreview() {
     const paths = this.currentPaths
     if (!this.currentSessionId) {
       this.currentSessionId = `session_${Date.now()}`
@@ -1697,15 +1518,11 @@ export class BoothApp {
     this.pauseBtn.style.display = 'none'
     this.isCapturing = false
     this._state = 'preview'
-    this.emitBoothStateFull({ phase: 'post-session', sessionPhotoPaths: paths })
-    
-    if (!options?.archived) {
-      this.photoPreview.show(paths, null, this.settingsData.serverUrl, this.settingsData.otp, sessionId, this.sessionMessages.postSession)
-      this.photoPreview.updateProgress(0, 'Preparing...')
-      this.previewWindow.style.display = 'none'
-      this.statusBar.style.display = 'none'
-    }
-    
+    this.emitBoothState()
+    this.photoPreview.show(paths, null, this.settingsData.serverUrl, this.settingsData.otp, sessionId, this.sessionMessages.postSession)
+    this.photoPreview.updateProgress(0, 'Preparing...')
+    this.previewWindow.style.display = 'none'
+    this.statusBar.style.display = 'none'
     this.camera.stop()
     this.webcamPreview.srcObject = null
 
@@ -1715,9 +1532,8 @@ export class BoothApp {
       imagePaths: filePaths,
       imageBuffers: blobBuffers.length > 0 ? blobBuffers : undefined,
       photoCount: paths.length,
-      shareTitle: this.sessionMessages.shareTitle,
-      archived: options?.archived
-    } as any)
+      shareTitle: this.sessionMessages.shareTitle
+    })
 
     if (uploadResult?.queued) {
       this.offlineIndicator.setQueueDepth(1)
@@ -1804,20 +1620,6 @@ export class BoothApp {
     }
   }
 
-  private showErrorOverlay(title: string, message: string, type: 'error') {
-    const overlay = document.createElement('div')
-    overlay.style.cssText = `
-      position: absolute; inset: 0; zIndex: 100;
-      display: flex; flex-direction: column; align-items: center; justify-content: center;
-      background: rgba(0,0,0,0.8); text-align: center; padding: 2rem;
-    `
-    overlay.innerHTML = `
-      <div style="font-size: 1.5rem; font-weight: bold; margin-bottom: 1rem; color: #ff5252;">${title}</div>
-      <div style="font-size: 1.1rem; color: #fff; max-width: 80%;">${message}</div>
-    `
-    this.previewBox.appendChild(overlay)
-  }
-
   // -------------------------------------------------------------------------
   // reset (retake)
   // -------------------------------------------------------------------------
@@ -1825,7 +1627,7 @@ export class BoothApp {
   private async reset() {
     this.isCapturing = false
     this._state = 'live'
-    this.emitBoothStateFull()
+    this.emitBoothState()
     this.captureBtn.style.visibility = 'visible'
     this.photoPreview.hide()
     this.previewWindow.style.display = 'flex'
@@ -1861,19 +1663,19 @@ export class BoothApp {
     await this.delay(250)
   }
 
-  private async showPostCapture(path: string, duration: number, currentShot: number, totalShots: number, signal?: AbortSignal) {
+  private async showPostCapture(path: string, duration: number) {
     this.postCaptureEl.src = path
     this.postCaptureEl.style.display = 'block'
 
     if (this.cameraMode === 'dslr') {
-      await this.delayWithCountdown(duration, 'post-photo-preview', currentShot, totalShots, signal)
+      await this.delay(duration * 1000)
       // Keep the taken photo frozen until the live preview stream resumes
       // (the between-shots code hides postCaptureEl when the first frame arrives)
       return
     }
 
     this.webcamPreview.style.opacity = '0'
-    await this.delayWithCountdown(duration, 'post-photo-preview', currentShot, totalShots, signal)
+    await this.delay(duration * 1000)
     this.webcamPreview.style.opacity = '1'
     this.postCaptureEl.style.display = 'none'
     this.postCaptureEl.src = ''
@@ -1881,26 +1683,6 @@ export class BoothApp {
 
   private delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms))
-  }
-
-  private async delayWithCountdown(
-    seconds: number, 
-    phase: 'post-photo-preview' | 'time-gap',
-    currentShot: number,
-    totalShots: number,
-    signal?: AbortSignal
-  ): Promise<void> {
-    for (let i = seconds; i > 0; i--) {
-      if (signal?.aborted) return
-      this.emitBoothStateFull({
-        phase: phase === 'time-gap' ? 'countdown' : phase,
-        currentShot,
-        totalShots,
-        countdown: i
-      })
-      await this.delay(1000)
-    }
-    this.emitBoothStateFull({ countdown: undefined })
   }
 
   private updateUploadStatusBar(data: { pending: number; failed: number; jobs?: any[] }) {
