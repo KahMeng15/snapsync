@@ -5,6 +5,10 @@ import { router } from './router'
 import axios from 'axios'
 
 const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, '')
+axios.defaults.withCredentials = true
+axios.defaults.xsrfCookieName = 'csrf-token'
+axios.defaults.xsrfHeaderName = 'x-csrf-token'
+
 axios.interceptors.request.use((config) => {
   if (config.url && config.url.startsWith('/api/')) {
     config.url = baseUrl + config.url
