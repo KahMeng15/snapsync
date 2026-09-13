@@ -266,11 +266,12 @@ export declare function getEventAnalytics(eventId: string): {
     logs: unknown[];
 };
 export declare function findUserByEmail(email: string): any;
-export declare function insertUser(id: string, email: string, passwordHash: string, role: string): void;
+export declare function findUserById(id: string): any;
+export declare function insertUser(id: string, email: string, passwordHash: string, role: string, name?: string, isDisabled?: number): void;
 export declare function getAllUsers(): unknown[];
 export declare function deleteUser(id: string): void;
 export declare function countUsers(): any;
-export declare function updateUserRole(id: string, role: string): void;
+export declare function updateUser(id: string, name: string, email: string, passwordHash: string, role: string, isDisabled: number): void;
 export declare function setEventShareOriginals(id: string, value: number): void;
 export declare function getOrCreateEventShareToken(eventId: string): string;
 export declare function getEventIdByShareToken(token: string): string | null;

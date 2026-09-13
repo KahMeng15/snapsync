@@ -40,11 +40,12 @@ exports.getPhotoSessionByShareId = getPhotoSessionByShareId;
 exports.logShareAnalytics = logShareAnalytics;
 exports.getEventAnalytics = getEventAnalytics;
 exports.findUserByEmail = findUserByEmail;
+exports.findUserById = findUserById;
 exports.insertUser = insertUser;
 exports.getAllUsers = getAllUsers;
 exports.deleteUser = deleteUser;
 exports.countUsers = countUsers;
-exports.updateUserRole = updateUserRole;
+exports.updateUser = updateUser;
 exports.setEventShareOriginals = setEventShareOriginals;
 exports.getOrCreateEventShareToken = getOrCreateEventShareToken;
 exports.getEventIdByShareToken = getEventIdByShareToken;
@@ -601,6 +602,20 @@ db.exec(`
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   )
 `);
+try {
+    db.exec(`ALTER TABLE users ADD COLUMN name TEXT`);
+}
+catch (e) {
+    if (!e.message.includes("duplicate column name"))
+        throw e;
+}
+try {
+    db.exec(`ALTER TABLE users ADD COLUMN is_disabled INTEGER NOT NULL DEFAULT 0`);
+}
+catch (e) {
+    if (!e.message.includes("duplicate column name"))
+        throw e;
+}
 db.exec(`
   CREATE TABLE IF NOT EXISTS share_analytics (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -951,15 +966,19 @@ function getEventAnalytics(eventId) {
     return { totalVisits, uniqueVisitors, logs };
 }
 const findUserByEmailStmt = db.prepare('SELECT * FROM users WHERE email = ?');
-const insertUserStmt = db.prepare('INSERT INTO users (id, email, password_hash, role) VALUES (?, ?, ?, ?)');
-const getAllUsersStmt = db.prepare('SELECT id, email, role, created_at FROM users');
+const findUserByIdStmt = db.prepare('SELECT * FROM users WHERE id = ?');
+const insertUserStmt = db.prepare('INSERT INTO users (id, email, password_hash, role, name, is_disabled) VALUES (?, ?, ?, ?, ?, ?)');
+const getAllUsersStmt = db.prepare('SELECT id, email, role, name, is_disabled, created_at FROM users');
 const deleteUserStmt = db.prepare('DELETE FROM users WHERE id = ?');
-const updateUserRoleStmt = db.prepare('UPDATE users SET role = ? WHERE id = ?');
+const updateUserStmt = db.prepare('UPDATE users SET name = ?, email = ?, password_hash = ?, role = ?, is_disabled = ? WHERE id = ?');
 function findUserByEmail(email) {
     return findUserByEmailStmt.get(email);
 }
-function insertUser(id, email, passwordHash, role) {
-    insertUserStmt.run(id, email, passwordHash, role);
+function findUserById(id) {
+    return findUserByIdStmt.get(id);
+}
+function insertUser(id, email, passwordHash, role, name = '', isDisabled = 0) {
+    insertUserStmt.run(id, email, passwordHash, role, name, isDisabled);
 }
 function getAllUsers() {
     return getAllUsersStmt.all();
@@ -970,8 +989,8 @@ function deleteUser(id) {
 function countUsers() {
     return db.prepare('SELECT COUNT(*) as count FROM users').get().count;
 }
-function updateUserRole(id, role) {
-    updateUserRoleStmt.run(role, id);
+function updateUser(id, name, email, passwordHash, role, isDisabled) {
+    updateUserStmt.run(name, email, passwordHash, role, isDisabled, id);
 }
 function setEventShareOriginals(id, value) {
     try {

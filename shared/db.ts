@@ -258,6 +258,10 @@ db.exec(`
   )
 `)
 
+try { db.exec(`ALTER TABLE users ADD COLUMN name TEXT`) } catch (e: any) { if (!e.message.includes("duplicate column name")) throw e; }
+try { db.exec(`ALTER TABLE users ADD COLUMN is_disabled INTEGER NOT NULL DEFAULT 0`) } catch (e: any) { if (!e.message.includes("duplicate column name")) throw e; }
+try { db.exec(`ALTER TABLE users ADD COLUMN is_superadmin INTEGER NOT NULL DEFAULT 0`) } catch (e: any) { if (!e.message.includes("duplicate column name")) throw e; }
+
 db.exec(`
   CREATE TABLE IF NOT EXISTS share_analytics (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -724,17 +728,22 @@ export function getEventAnalytics(eventId: string) {
 }
 
 const findUserByEmailStmt = db.prepare('SELECT * FROM users WHERE email = ?')
-const insertUserStmt = db.prepare('INSERT INTO users (id, email, password_hash, role) VALUES (?, ?, ?, ?)')
-const getAllUsersStmt = db.prepare('SELECT id, email, role, created_at FROM users')
+const findUserByIdStmt = db.prepare('SELECT * FROM users WHERE id = ?')
+const insertUserStmt = db.prepare('INSERT INTO users (id, email, password_hash, role, name, is_disabled, is_superadmin) VALUES (?, ?, ?, ?, ?, ?, ?)')
+const getAllUsersStmt = db.prepare('SELECT id, email, role, name, is_disabled, is_superadmin, created_at FROM users')
 const deleteUserStmt = db.prepare('DELETE FROM users WHERE id = ?')
-const updateUserRoleStmt = db.prepare('UPDATE users SET role = ? WHERE id = ?')
+const updateUserStmt = db.prepare('UPDATE users SET name = ?, email = ?, password_hash = ?, role = ?, is_disabled = ?, is_superadmin = ? WHERE id = ?')
 
 export function findUserByEmail(email: string) {
   return findUserByEmailStmt.get(email) as any
 }
 
-export function insertUser(id: string, email: string, passwordHash: string, role: string) {
-  insertUserStmt.run(id, email, passwordHash, role)
+export function findUserById(id: string) {
+  return findUserByIdStmt.get(id) as any
+}
+
+export function insertUser(id: string, email: string, passwordHash: string, role: string, name: string = '', isDisabled: number = 0, isSuperAdmin: number = 0) {
+  insertUserStmt.run(id, email, passwordHash, role, name, isDisabled, isSuperAdmin)
 }
 
 export function getAllUsers() {
@@ -749,8 +758,12 @@ export function countUsers() {
   return (db.prepare('SELECT COUNT(*) as count FROM users').get() as any).count
 }
 
-export function updateUserRole(id: string, role: string) {
-  updateUserRoleStmt.run(role, id)
+export function updateUser(id: string, name: string, email: string, passwordHash: string, role: string, isDisabled: number, isSuperAdmin: number) {
+  updateUserStmt.run(name, email, passwordHash, role, isDisabled, isSuperAdmin, id)
+}
+
+export function clearSuperAdmins() {
+  db.prepare('UPDATE users SET is_superadmin = 0').run()
 }
 
 export function setEventShareOriginals(id: string, value: number) {

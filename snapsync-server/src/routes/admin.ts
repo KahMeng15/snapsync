@@ -20,7 +20,7 @@ import {
   endEvent, deleteEvent, listEventPhotoSessions,
   updateEventSettingsById, getGlobalSettings, updateGlobalSettings,
   archiveSession, restoreSession, getEventAnalytics,
-  getAllUsers, insertUser, deleteUser, findUserByEmail, regenerateSessionShareId, setEventShareOriginals,
+  getAllUsers, insertUser, deleteUser, findUserByEmail, findUserById, updateUser, clearSuperAdmins, regenerateSessionShareId, setEventShareOriginals,
   getSessionShares, createSessionShare, setSessionShareStatus, deleteSessionShare, setSessionDimensions, addEventOperator, listEventOperators, deleteEventOperator, getOrCreateEventShareToken
 } from '@snapsync/shared'
 
@@ -42,7 +42,17 @@ import { z } from 'zod'
 const createUserSchema = z.object({
   email: z.string().email('Invalid email address'),
   password: z.string().min(8, 'Password must be at least 8 characters').max(128),
-  role: z.enum(['admin', 'operator']),
+  role: z.enum(['admin', 'operator', 'superadmin']),
+  name: z.string().min(1, 'Name is required'),
+})
+
+const updateUserSchema = z.object({
+  email: z.string().email('Invalid email address'),
+  password: z.string().min(8, 'Password must be at least 8 characters').max(128).optional().or(z.literal('')),
+  role: z.enum(['admin', 'operator', 'superadmin']),
+  name: z.string().min(1, 'Name is required'),
+  isDisabled: z.boolean().optional(),
+  adminPassword: z.string().min(1, 'Admin password is required'),
 })
 
 router.post('/users', requireRole('admin'), async (req: Request, res: Response) => {
@@ -51,26 +61,122 @@ router.post('/users', requireRole('admin'), async (req: Request, res: Response) 
     if (!parseResult.success) {
       return res.status(400).json({ error: parseResult.error.issues[0].message })
     }
-    const { email, password, role } = parseResult.data as any
+    const { email, password, role, name } = parseResult.data
     
     if (findUserByEmail(email)) {
       return res.status(400).json({ error: 'User already exists' })
     }
 
+    const currentUserEmail = (req as any).user.email
+    const currentUser = findUserByEmail(currentUserEmail)
+    if (role === 'superadmin' && (!currentUser || !currentUser.is_superadmin)) {
+      return res.status(403).json({ error: 'Only the current Super Admin can create another Super Admin' })
+    }
+
     const passwordHash = await bcrypt.hash(password, 10)
-    insertUser(uuidv4(), email, passwordHash, role)
+    
+    if (role === 'superadmin') {
+      clearSuperAdmins()
+      insertUser(uuidv4(), email, passwordHash, 'admin', name || '', 0, 1)
+    } else {
+      insertUser(uuidv4(), email, passwordHash, role, name || '', 0, 0)
+    }
+    
     res.json({ success: true })
   } catch (error: any) {
     res.status(500).json({ error: error.message })
   }
 })
 
-router.delete('/users/:id', requireRole('admin'), (req: Request, res: Response) => {
+router.put('/users/:id', requireRole('admin'), async (req: Request, res: Response) => {
+  try {
+    const parseResult = updateUserSchema.safeParse(req.body)
+    if (!parseResult.success) {
+      return res.status(400).json({ error: parseResult.error.issues[0].message })
+    }
+    const { email, password, role, name, isDisabled, adminPassword } = parseResult.data
+    
+    const currentUserEmail = (req as any).user.email
+    const currentUser = findUserByEmail(currentUserEmail)
+    if (!currentUser || !(await bcrypt.compare(adminPassword, currentUser.password_hash))) {
+      return res.status(403).json({ error: 'Invalid admin password' })
+    }
+
+    const targetUser = findUserById(req.params.id)
+    if (!targetUser) return res.status(404).json({ error: 'User not found' })
+
+    if (email !== targetUser.email && findUserByEmail(email)) {
+      return res.status(400).json({ error: 'Email already exists' })
+    }
+
+    if (currentUser.id === req.params.id && isDisabled) {
+      return res.status(400).json({ error: 'Cannot disable yourself' })
+    }
+    
+    if (currentUser.id === req.params.id && (role === 'operator')) {
+      return res.status(400).json({ error: 'Cannot demote yourself to operator' })
+    }
+
+    let finalIsSuperAdmin = targetUser.is_superadmin
+    let finalRole = targetUser.role
+
+    if (role === 'superadmin') {
+      if (!currentUser.is_superadmin) {
+        return res.status(403).json({ error: 'Only the current Super Admin can transfer super admin rights' })
+      }
+      finalRole = 'admin'
+      finalIsSuperAdmin = 1
+    } else {
+      finalRole = role
+      if (targetUser.is_superadmin && currentUser.id === req.params.id) {
+        return res.status(400).json({ error: 'Cannot remove your own super admin status. Transfer it to another user instead.' })
+      }
+      if (targetUser.is_superadmin && !currentUser.is_superadmin) {
+        return res.status(403).json({ error: 'Cannot modify a super admin unless you are the super admin' })
+      }
+      // If we are changing a superadmin to an operator/admin, it removes superadmin
+      if (targetUser.is_superadmin) {
+        finalIsSuperAdmin = 0
+      }
+    }
+
+    let hash = targetUser.password_hash
+    if (password) {
+      hash = await bcrypt.hash(password, 10)
+    }
+
+    if (finalIsSuperAdmin === 1 && !targetUser.is_superadmin) {
+      clearSuperAdmins()
+    }
+
+    updateUser(req.params.id, name || '', email, hash, finalRole, isDisabled ? 1 : 0, finalIsSuperAdmin)
+    res.json({ success: true })
+  } catch (error: any) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
+router.delete('/users/:id', requireRole('admin'), async (req: Request, res: Response) => {
   try {
     const currentUser = (req as any).user
     if (currentUser.userId === req.params.id) {
       return res.status(400).json({ error: 'Cannot delete yourself' })
     }
+    
+    const adminPassword = req.body.adminPassword
+    if (!adminPassword) {
+      return res.status(400).json({ error: 'Admin password is required' })
+    }
+    const currentUserDb = findUserByEmail(currentUser.email)
+    if (!currentUserDb || !(await bcrypt.compare(adminPassword, currentUserDb.password_hash))) {
+      return res.status(403).json({ error: 'Invalid admin password' })
+    }
+
+    const targetUser = findUserById(req.params.id)
+    if (targetUser && targetUser.is_superadmin && !currentUserDb.is_superadmin) {
+      return res.status(403).json({ error: 'Only a super admin can delete another super admin' })
+    }
+
     deleteUser(req.params.id)
     res.json({ success: true })
   } catch (error: any) {

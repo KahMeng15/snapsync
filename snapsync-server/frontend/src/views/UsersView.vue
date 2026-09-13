@@ -5,46 +5,95 @@
         <h2>System Users</h2>
         <p class="card-desc">Manage administrators and operators for your snapsync.</p>
         <div class="settings-box">
-          <div v-for="user in users" :key="user.id" class="field-row">
+          <div v-for="user in users" :key="user.id" class="field-row" :class="{ disabled: user.is_disabled }">
             <div class="user-info">
-              <h3 class="user-email">{{ user.email }}</h3>
+              <h3 class="user-email">
+                <span v-if="user.name" class="user-name">{{ user.name }}</span>
+                <span v-if="user.name" class="user-email-sub">({{ user.email }})</span>
+                <span v-else>{{ user.email }}</span>
+              </h3>
+              <span v-if="user.is_disabled" class="disabled-badge">Disabled</span>
             </div>
             <div class="user-actions">
-              <span class="user-role" :class="`role-${user.role}`">{{ user.role }}</span>
-              <button v-if="user.email !== authStore.user?.email" @click="deleteUser(user.id)" class="btn-icon" title="Remove User">✕</button>
+              <span class="user-role" :class="`role-${user.role}`">
+                {{ user.role === 'admin' && user.is_superadmin ? 'super admin' : user.role }}
+              </span>
+              <button @click="openEditModal(user)" class="btn-icon" title="Edit User">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+              </button>
+              <button v-if="user.email !== authStore.user?.email" @click="openDeleteModal(user.id)" class="btn-icon" title="Remove User">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+              </button>
               <div v-else class="btn-icon-placeholder"></div>
             </div>
           </div>
         </div>
         <div class="card-actions">
-          <AppButton variant="primary" @click="showAddModal = true">Add User</AppButton>
+          <AppButton variant="primary" @click="openAddModal">Add User</AppButton>
         </div>
       </section>
     </main>
 
     <Teleport to="body">
-      <div v-if="showAddModal" class="modal-overlay" @click.self="showAddModal = false">
+      <div v-if="showUserModal" class="modal-overlay" @click.self="showUserModal = false">
         <div class="modal-content">
-          <h2>Add New User</h2>
+          <h2>{{ isEditing ? 'Edit User' : 'Add New User' }}</h2>
           <div class="form-field">
-            <label>Email</label>
-            <input type="email" v-model="newUser.email" placeholder="operator@example.com" />
+            <label>Name</label>
+            <input type="text" v-model="userForm.name" placeholder="John Doe" />
           </div>
           <div class="form-field">
-            <label>Password</label>
-            <input type="password" v-model="newUser.password" />
+            <label>Email</label>
+            <input type="email" v-model="userForm.email" placeholder="operator@example.com" />
+          </div>
+          <div class="form-field">
+            <label>{{ isEditing ? 'New Password (leave blank to keep current)' : 'Password' }}</label>
+            <input type="password" v-model="userForm.password" />
           </div>
           <div class="form-field">
             <label>Role</label>
-            <select v-model="newUser.role">
+            <select v-model="userForm.role">
+              <option v-if="authStore.user?.isSuperAdmin" value="superadmin">Super Admin</option>
               <option value="admin">Admin</option>
               <option value="operator">Operator</option>
             </select>
           </div>
+          <div v-if="userForm.role === 'superadmin' && userForm.email !== authStore.user?.email" class="warning-box">
+            ⚠️ Warning: This will transfer your Super Admin privileges to this user. You will be demoted to a regular Admin, as there can only be one Super Admin.
+          </div>
+          <div class="form-field checkbox-field" v-if="isEditing && userForm.email !== authStore.user?.email">
+            <label>
+              <input type="checkbox" v-model="userForm.isDisabled" />
+              Disable Account
+            </label>
+          </div>
+          
+          <div class="form-field auth-field" v-if="isEditing">
+            <label>Admin Password (Required to save changes)</label>
+            <input type="password" v-model="userForm.adminPassword" placeholder="Your password" />
+          </div>
+
           <div class="modal-actions">
-            <AppButton variant="secondary" @click="showAddModal = false">Cancel</AppButton>
-            <AppButton variant="primary" @click="addUser" :disabled="loading">
-              {{ loading ? 'Saving...' : 'Add User' }}
+            <AppButton variant="secondary" @click="showUserModal = false">Cancel</AppButton>
+            <AppButton variant="primary" @click="saveUser" :disabled="loading">
+              {{ loading ? 'Saving...' : 'Save' }}
+            </AppButton>
+          </div>
+        </div>
+      </div>
+      
+      <div v-if="showDeleteModal" class="modal-overlay" @click.self="showDeleteModal = false">
+        <div class="modal-content">
+          <h2>Confirm Deletion</h2>
+          <p style="margin-bottom: 1rem; color: var(--color-text-sub); font-size: var(--text-sm);">Please enter your admin password to confirm deleting this user.</p>
+          <div class="form-field">
+            <label>Admin Password</label>
+            <input type="password" v-model="deleteAdminPassword" placeholder="Your password" />
+          </div>
+          <div class="modal-actions">
+            <AppButton variant="secondary" @click="showDeleteModal = false">Cancel</AppButton>
+            <AppButton variant="primary" @click="deleteUser" :disabled="loading" style="background: var(--color-error); color: white;">
+              {{ loading ? 'Deleting...' : 'Delete' }}
             </AppButton>
           </div>
         </div>
@@ -65,9 +114,15 @@ const router = useRouter()
 const authStore = useAuthStore()
 
 const users = ref<any[]>([])
-const showAddModal = ref(false)
+const showUserModal = ref(false)
+const showDeleteModal = ref(false)
+const isEditing = ref(false)
+const editingUserId = ref('')
 const loading = ref(false)
-const newUser = ref({ email: '', password: '', role: 'operator' })
+const deleteAdminPassword = ref('')
+const userToDelete = ref('')
+
+const userForm = ref({ email: '', password: '', role: 'operator', name: '', isDisabled: false, adminPassword: '' })
 
 async function fetchUsers() {
   try {
@@ -78,30 +133,80 @@ async function fetchUsers() {
   }
 }
 
-async function addUser() {
-  if (!newUser.value.email || !newUser.value.password) return
+function openAddModal() {
+  isEditing.value = false
+  userForm.value = { email: '', password: '', role: 'operator', name: '', isDisabled: false, adminPassword: '' }
+  showUserModal.value = true
+}
+
+function openEditModal(user: any) {
+  isEditing.value = true
+  editingUserId.value = user.id
+  userForm.value = { 
+    email: user.email, 
+    password: '', 
+    role: user.is_superadmin ? 'superadmin' : user.role, 
+    name: user.name || '', 
+    isDisabled: user.is_disabled === 1, 
+    adminPassword: '' 
+  }
+  showUserModal.value = true
+}
+
+function openDeleteModal(id: string) {
+  userToDelete.value = id
+  deleteAdminPassword.value = ''
+  showDeleteModal.value = true
+}
+
+async function saveUser() {
+  if (!userForm.value.name) {
+    toast.error('Name is required')
+    return
+  }
+  if (!userForm.value.email) return
+  if (!isEditing.value && !userForm.value.password) return
+  if (isEditing.value && !userForm.value.adminPassword) {
+    toast.error('Admin password is required to save changes')
+    return
+  }
+  
   loading.value = true
   try {
-    await axios.post('/api/admin/users', newUser.value)
-    showAddModal.value = false
-    newUser.value = { email: '', password: '', role: 'operator' }
-    toast.success('User added successfully')
+    if (isEditing.value) {
+      await axios.put(`/api/admin/users/${editingUserId.value}`, userForm.value)
+      toast.success('User updated successfully')
+    } else {
+      await axios.post('/api/admin/users', userForm.value)
+      toast.success('User added successfully')
+    }
+    showUserModal.value = false
     await fetchUsers()
   } catch (err: any) {
-    toast.error(err.response?.data?.error || 'Failed to add user')
+    toast.error(err.response?.data?.error || 'Failed to save user')
   } finally {
     loading.value = false
   }
 }
 
-async function deleteUser(id: string) {
-  if (!confirm('Are you sure you want to delete this user?')) return
+async function deleteUser() {
+  if (!deleteAdminPassword.value) {
+    toast.error('Admin password is required')
+    return
+  }
+  
+  loading.value = true
   try {
-    await axios.delete(`/api/admin/users/${id}`)
+    await axios.delete(`/api/admin/users/${userToDelete.value}`, {
+      data: { adminPassword: deleteAdminPassword.value }
+    })
     toast.success('User deleted')
+    showDeleteModal.value = false
     await fetchUsers()
   } catch (err: any) {
     toast.error(err.response?.data?.error || 'Failed to delete user')
+  } finally {
+    loading.value = false
   }
 }
 
@@ -112,7 +217,6 @@ onMounted(() => {
 
 <style scoped>
 .users-page {
-  /* min-height: 100vh; removed to prevent double scrolling */
   background: var(--color-bg);
   color: var(--color-text);
 }
@@ -159,15 +263,13 @@ onMounted(() => {
   margin: 0;
 }
 
-
-
 .user-actions {
   display: flex;
   align-items: center;
   gap: 1rem;
 }
 .btn-icon-placeholder {
-  width: 32px; /* roughly the size of the icon button to keep alignment consistent */
+  width: 32px;
 }
 
 .user-info {
@@ -180,6 +282,28 @@ onMounted(() => {
   font-size: var(--text-base);
   font-weight: 500;
 }
+.user-name {
+  font-weight: 600;
+  margin-right: 0.5rem;
+}
+.user-email-sub {
+  color: var(--color-text-sub);
+  font-size: var(--text-sm);
+  font-weight: 400;
+}
+.disabled-badge {
+  font-size: var(--text-xs);
+  color: var(--color-error);
+  border: 1px solid var(--color-error);
+  padding: 0.1rem 0.4rem;
+  border-radius: var(--radius-sm);
+  margin-top: 0.25rem;
+  width: max-content;
+}
+.field-row.disabled {
+  opacity: 0.6;
+}
+
 .user-role {
   font-size: var(--text-xs);
   padding: 0.2rem 0.5rem;
@@ -225,12 +349,12 @@ onMounted(() => {
   color: var(--color-text-muted);
   cursor: pointer;
   padding: 0.5rem;
+  font-size: 1.1rem;
 }
 .btn-icon:hover {
   color: var(--color-error);
 }
 
-/* Modal styles from existing app */
 .modal-overlay {
   position: fixed;
   inset: 0;
@@ -269,6 +393,29 @@ onMounted(() => {
   padding: 0.5rem;
   border-radius: var(--radius-sm);
 }
+.checkbox-field {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+}
+.checkbox-field input {
+  width: auto;
+}
+.warning-box {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid var(--color-error);
+  color: var(--color-error);
+  padding: 0.75rem;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  margin-bottom: 1rem;
+}
+.auth-field {
+  border-top: 1px dashed var(--color-border);
+  padding-top: 1rem;
+  margin-top: 0.5rem;
+}
+
 .modal-actions {
   display: flex;
   justify-content: flex-end;

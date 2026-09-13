@@ -12,7 +12,7 @@ const router = Router()
 async function seedAdminIfNeeded() {
   if (countUsers() === 0) {
     const defaultHash = await bcrypt.hash(config.operator.password, 10)
-    insertUser(uuidv4(), config.operator.email, defaultHash, 'admin')
+    insertUser(uuidv4(), config.operator.email, defaultHash, 'admin', 'Default Admin', 0, 1)
     logger.info(`Seeded default admin user: ${config.operator.email}`)
   }
 }
@@ -57,6 +57,11 @@ router.post('/login', checkLoginLockout, async (req: Request, res: Response) => 
         logger.warn(`Failed login attempt for unknown user: ${email}`)
         return res.status(401).json({ error: 'Invalid credentials' })
       }
+      if (user.is_disabled) {
+        recordFailedLogin(req)
+        logger.warn(`Failed login attempt for disabled user: ${email}`)
+        return res.status(403).json({ error: 'Account disabled' })
+      }
       const isValid = await bcrypt.compare(password, user.password_hash)
       if (!isValid) {
         recordFailedLogin(req)
@@ -71,8 +76,8 @@ router.post('/login', checkLoginLockout, async (req: Request, res: Response) => 
     const sessionId = uuidv4()
     
     const tokenPayload = eventIdScope
-      ? { userId: 'event-operator', email: eventIdScope, role: 'operator', eventIdScope, sessionId }
-      : { userId: (findUserByEmail(email) as any).id, email, role: userRole, sessionId }
+      ? { userId: 'event-operator', email: eventIdScope, role: 'operator', isSuperAdmin: false, eventIdScope, sessionId }
+      : { userId: (findUserByEmail(email) as any).id, email, role: userRole, isSuperAdmin: !!(findUserByEmail(email) as any).is_superadmin, sessionId }
 
     const accessToken = jwt.sign(
       tokenPayload,
@@ -209,7 +214,7 @@ router.get('/me', (req: Request, res: Response) => {
 
   try {
     const decoded = jwt.verify(token, config.jwt.secret) as any
-    res.json({ user: { email: decoded.email, role: decoded.role, eventId: decoded.eventIdScope } })
+    res.json({ user: { email: decoded.email, role: decoded.role, isSuperAdmin: decoded.isSuperAdmin, eventId: decoded.eventIdScope } })
   } catch {
     res.status(401).json({ error: 'Invalid token' })
   }
