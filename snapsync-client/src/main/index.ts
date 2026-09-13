@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, screen } from 'electron'
+import { app, BrowserWindow, ipcMain, screen, session, systemPreferences } from 'electron'
 import path from 'path'
 import fs from 'fs'
 import { initIpcHandlers } from './ipc'
@@ -33,6 +33,22 @@ function setActiveServerUrl(url: string) {
 }
 
 app.on('ready', async () => {
+  if (process.platform === 'darwin') {
+    try {
+      await systemPreferences.askForMediaAccess('camera')
+    } catch (err) {
+      console.error('Failed to ask for camera access:', err)
+    }
+  }
+
+  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
+    if (permission === 'media') {
+      callback(true)
+    } else {
+      callback(false)
+    }
+  })
+
   offlineQueue = new OfflineQueue()
   offlineQueue.cleanupOldSessions(7) // Clean up history older than 7 days
   dslrManager = new DslrManager()

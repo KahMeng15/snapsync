@@ -14,16 +14,26 @@ export class CameraManager {
 
   async startWebcam(deviceId?: string): Promise<MediaStream | null> {
     try {
-      const video: MediaTrackConstraints = {
+      let video: MediaTrackConstraints | boolean = {
         width: { ideal: 1920 },
         height: { ideal: 1440 },
       }
-      if (deviceId) {
-        video.deviceId = { exact: deviceId }
-      } else {
-        video.facingMode = 'user'
+      
+      try {
+        if (deviceId) {
+          video.deviceId = { exact: deviceId }
+        }
+        this.stream = await navigator.mediaDevices.getUserMedia({ video, audio: false })
+      } catch (err: any) {
+        if (deviceId && (err.name === 'OverconstrainedError' || err.name === 'NotFoundError')) {
+          console.warn(`Webcam deviceId ${deviceId} not found, falling back to default camera...`)
+          video = { width: { ideal: 1920 }, height: { ideal: 1440 } }
+          this.stream = await navigator.mediaDevices.getUserMedia({ video, audio: false })
+        } else {
+          throw err
+        }
       }
-      this.stream = await navigator.mediaDevices.getUserMedia({ video, audio: false })
+      
       return this.stream
     } catch (err) {
       console.error('Webcam start failed:', err)

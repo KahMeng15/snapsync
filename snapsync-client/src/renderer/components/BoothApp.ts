@@ -56,6 +56,7 @@ export class BoothApp {
   private isLive = false
   private isTransitioning = false
   private isPaused = false
+  private cameraActive = false
   private cameraMode: CameraMode = 'webcam'
   private settingsData: {
     photoCount: number
@@ -136,10 +137,11 @@ export class BoothApp {
     // ------------------------------------------------------------------
     this.webcamPreview = document.createElement('video')
     Object.assign(this.webcamPreview.style, {
-      width: '100%', height: '100%', display: 'block',
+      width: '100%', height: '100%', display: 'block', objectFit: 'contain'
     })
     this.webcamPreview.autoplay = true
     this.webcamPreview.muted = true
+    this.webcamPreview.playsInline = true
     this.webcamPreview.playsInline = true
 
     // ------------------------------------------------------------------
@@ -1036,11 +1038,14 @@ export class BoothApp {
     connectingOverlay.remove()
 
     if (!started) {
+      this.cameraActive = false
       const errMsg = this.dslrPreview.lastError ||
         'Camera liveview failed. Unplug and re-plug the USB cable, then try again.\n\n' +
         'If the problem persists, run in a terminal:\nkillall PTPCamera'
       console.error('[BoothApp] DSLR liveview failed — showing error overlay')
       this.showDslrError(errMsg)
+    } else {
+      this.cameraActive = true
     }
   }
 
@@ -1080,9 +1085,12 @@ export class BoothApp {
       if (settings.width && settings.height) {
         this.previewBox.style.aspectRatio = `${settings.width} / ${settings.height}`
       }
+      this.cameraActive = true
       console.log(`[BoothApp] startWebcamPreview() — stream active (${settings.width}x${settings.height})`)
     } else {
+      this.cameraActive = false
       console.error('[BoothApp] startWebcamPreview() — getUserMedia returned null stream')
+      this.showErrorOverlay('Webcam Failed', 'Could not access the webcam. Please check permissions or device connection.', 'error')
     }
     connectingOverlay.remove()
   }
@@ -1182,6 +1190,7 @@ export class BoothApp {
 
   private async startCapture() {
     if (this.isCapturing || !this.isLive) return
+    if (!this.cameraActive) return
     
     if (this.pendingRetakes && this.pendingRetakes.length > 0) {
       const indices = this.pendingRetakes
@@ -1618,6 +1627,20 @@ export class BoothApp {
     if (this.processingOverlay) {
       this.processingOverlay.style.display = 'none'
     }
+  }
+
+  private showErrorOverlay(title: string, message: string, type: 'error') {
+    const overlay = document.createElement('div')
+    overlay.style.cssText = `
+      position: absolute; inset: 0; zIndex: 100;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      background: rgba(0,0,0,0.8); text-align: center; padding: 2rem;
+    `
+    overlay.innerHTML = `
+      <div style="font-size: 1.5rem; font-weight: bold; margin-bottom: 1rem; color: #ff5252;">${title}</div>
+      <div style="font-size: 1.1rem; color: #fff; max-width: 80%;">${message}</div>
+    `
+    this.previewBox.appendChild(overlay)
   }
 
   // -------------------------------------------------------------------------
