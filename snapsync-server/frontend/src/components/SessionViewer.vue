@@ -34,7 +34,7 @@
             :alt="'Photo ' + (i + 1)"
             class="grid-img"
             loading="lazy"
-            @load="$event.target.classList.add('loaded')"
+            @load="(e) => { e.target.classList.add('loaded'); e.target.style.aspectRatio = e.target.naturalWidth + '/' + e.target.naturalHeight; }"
             @click="openFullscreen(i)"
           />
         </div>
@@ -43,11 +43,17 @@
         </div>
 
         <div class="viewer-actions">
-          <div v-if="activeFrames.length > 0" class="frame-toggle">
-            <select v-model="selectedFrameId" @change="fetchFramedPhotos" class="frame-select">
-              <option value="">Original Photos</option>
-              <option v-for="frame in activeFrames" :key="frame.id" :value="frame.id">{{ frame.name }}</option>
-            </select>
+          <div v-if="activeFrames.length > 0" class="frame-pills">
+            <AppButton 
+              :variant="selectedFrameId === '' ? 'primary' : 'secondary'"
+              @click="selectedFrameId = ''; fetchFramedPhotos()"
+            >Originals</AppButton>
+            <AppButton 
+              v-for="frame in activeFrames" 
+              :key="frame.id"
+              :variant="selectedFrameId === frame.id ? 'primary' : 'secondary'"
+              @click="selectedFrameId = frame.id; fetchFramedPhotos()"
+            >{{ frame.name }}</AppButton>
           </div>
           <div class="viewer-actions-buttons">
             <AppButton variant="secondary" @click="copyPrimaryShare" style="width: 140px; justify-content: center;">
@@ -92,7 +98,6 @@
       </transition>
       
       <div class="fs-image-wrap">
-        <div class="fs-blur-bg" v-if="currentThumb" :style="{ backgroundImage: `url(${currentThumb})` }"></div>
         <img
           v-if="currentThumb"
           :src="currentThumb"
@@ -580,7 +585,9 @@ async function deleteSession() {
 
 function formatTime(ts: string) {
   const d = new Date(ts)
-  return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true })
+  const time = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })
+  const date = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+  return `${time.replace(' ', '')}, ${date}`
 }
 </script>
 
@@ -670,24 +677,15 @@ function formatTime(ts: string) {
   background: var(--color-surface-alt);
   color: var(--color-text);
 }
-.frame-toggle {
+.frame-pills {
   display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
   align-items: center;
+  justify-content: center;
 }
-.frame-select {
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  color: var(--color-text);
-  padding: 0.5rem 0.75rem;
-  border-radius: var(--radius-sm);
-  font-size: var(--text-sm);
-  outline: none;
-  cursor: pointer;
-  min-width: 150px;
-}
-.frame-select:focus {
-  border-color: var(--color-text-sub);
-}
+
+
 .viewer-body {
   padding: 1.5rem;
   flex: 1;
@@ -719,11 +717,17 @@ function formatTime(ts: string) {
 
 .empty-state {
   color: var(--color-text-sub);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  min-height: 200px;
   text-align: center;
   padding: 3rem 1rem;
-  margin-bottom: 2rem;
   background: var(--color-surface);
   border-radius: var(--radius-md);
+  margin-bottom: 0;
   border: 1px dashed var(--color-border);
 }
 
@@ -741,9 +745,8 @@ function formatTime(ts: string) {
 .grid-img {
   max-width: 100%;
   max-height: 100%;
-  width: auto;
+  width: 100%;
   height: auto;
-  justify-self: center;
   align-self: center;
   min-height: 0;
   min-width: 0;
@@ -769,10 +772,9 @@ function formatTime(ts: string) {
 
 .viewer-actions {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 0.75rem;
-  flex-wrap: wrap;
+  gap: 1.25rem;
   padding-top: 1.5rem;
 }
 
@@ -961,45 +963,30 @@ function formatTime(ts: string) {
   display: flex;
   align-items: center;
   justify-content: center;
-  max-width: 90vw;
-  max-height: 80vh;
+  width: 100vw;
+  height: 100vh;
+  max-width: 100vw;
+  max-height: 100vh;
   overflow: hidden;
-  border-radius: var(--radius-md);
 }
 
-.fs-blur-bg {
-  position: absolute;
-  inset: -20px;
-  background-size: cover;
-  background-position: center;
-  filter: blur(15px);
-  opacity: 0.4;
-  z-index: 0;
-}
-
-.fs-thumb {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  border-radius: var(--radius-md);
-  transition: opacity 0.3s ease;
-}
-
-.fs-thumb.thumb-hidden {
-  opacity: 0;
-}
-
+.fs-thumb,
 .fs-image {
-  max-width: 90vw;
-  max-height: 80vh;
-  border-radius: var(--radius-md);
+  max-width: 100vw;
+  max-height: 100vh;
+  width: auto;
+  height: auto;
+  object-fit: contain;
   opacity: 0;
   transition: opacity 0.3s ease;
   will-change: opacity;
   position: relative;
   z-index: 1;
+}
+
+.fs-thumb {
+  position: absolute;
+  opacity: 1;
 }
 
 .fs-image.fs-loaded {
@@ -1019,12 +1006,6 @@ function formatTime(ts: string) {
     flex-direction: column;
     align-items: stretch;
     gap: 1rem;
-  }
-  .frame-toggle {
-    width: 100%;
-  }
-  .frame-select {
-    width: 100%;
   }
   .viewer-actions-buttons {
     display: flex;
