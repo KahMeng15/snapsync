@@ -203,7 +203,7 @@ export class BoothApp {
       display: 'flex', alignItems: 'center', justifyContent: 'center',
     })
     
-    this.previewWindow.appendChild(this.overlay)
+    this.previewBox.appendChild(this.overlay)
 
     this.stateDisplay = document.createElement('div')
     Object.assign(this.stateDisplay.style, {
@@ -394,7 +394,7 @@ export class BoothApp {
     style.textContent = `@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`
     document.head.appendChild(style)
 
-    this.previewWindow.appendChild(this.stateDisplay)
+    this.previewBox.appendChild(this.stateDisplay)
 
     this.container.append(
       this.landingEl,
