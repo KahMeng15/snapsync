@@ -160,19 +160,35 @@
         </div>
       </div>
       <div class="actions-group" style="margin-top: 1rem;">
-        <button class="app-btn full-width-btn app-btn--secondary" @click="initiateRetake" :disabled="retakeSelection.length === 0">
-          Initiate Retake ({{ retakeSelection.length }})
+        <button class="app-btn full-width-btn app-btn--secondary" @click="initiateRetake" :disabled="retakeSelection.length === 0 || pendingAction === 'retake'">
+          <span v-if="pendingAction === 'retake'" class="app-spinner inline-spinner"></span>
+          {{ pendingAction === 'retake' ? 'Initiating...' : 'Initiate Retake (' + retakeSelection.length + ')' }}
         </button>
-        <button v-if="boothState?.shareUrl" class="app-btn full-width-btn app-btn--secondary" @click="toggleQR">
-          {{ qrShowing ? 'Hide QR on 📺' : 'Show QR on 📺' }}
+        <button v-if="boothState?.shareUrl" class="app-btn full-width-btn app-btn--secondary" @click="toggleQR" :disabled="pendingAction === 'qr'">
+          <span v-if="pendingAction === 'qr'" class="app-spinner inline-spinner"></span>
+          {{ qrShowing ? 'Hide QR on Booth' : 'Show QR on Booth' }}
+        </button>
+        <button v-if="boothState?.shareUrl" class="app-btn full-width-btn app-btn--secondary" @click="showLocalQR">
+          Show QR on Remote
         </button>
       </div>
     </section>
   </aside>
+
+  <!-- Local QR Modal -->
+  <div v-if="showRemoteQR" class="app-modal-overlay" @click="showRemoteQR = false" style="z-index: 10000; cursor: pointer;">
+    <div class="app-modal" style="background: white; padding: 2rem; border-radius: 1rem; text-align: center; max-width: 90vw; width: 400px; color: black;" @click.stop>
+      <h2 style="margin-bottom: 1rem; margin-top: 0;">Scan to Get Photos</h2>
+      <img v-if="remoteQrDataUrl" :src="remoteQrDataUrl" style="width: 100%; height: auto; max-width: 300px; margin: 0 auto; display: block;" />
+      <div v-else style="padding: 4rem; color: #666;">Generating QR...</div>
+      <button class="app-btn btn-primary" style="margin-top: 2rem; width: 100%; padding: 1rem;" @click="showRemoteQR = false">Close</button>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import QRCode from 'qrcode'
 
 const props = defineProps<{
   connected: boolean
@@ -273,6 +289,8 @@ function toggleRetake(index: number) {
 
 function initiateRetake() {
   if (retakeSelection.value.length > 0) {
+    pendingAction.value = 'retake'
+    setTimeout(() => { if (pendingAction.value === 'retake') pendingAction.value = null }, 2000)
     props.sendMessage('booth-retake', { eventId: props.eventId, indices: retakeSelection.value })
     retakeSelection.value = []
   }
@@ -280,8 +298,23 @@ function initiateRetake() {
 
 // QR Logic
 const qrShowing = ref(false)
+const showRemoteQR = ref(false)
+const remoteQrDataUrl = ref('')
+
+async function showLocalQR() {
+  if (!props.boothState?.shareUrl) return
+  showRemoteQR.value = true
+  remoteQrDataUrl.value = await QRCode.toDataURL(props.boothState.shareUrl, {
+    width: 500,
+    margin: 2,
+  })
+}
+
 function toggleQR() {
   qrShowing.value = !qrShowing.value
+  pendingAction.value = 'qr'
+  setTimeout(() => { if (pendingAction.value === 'qr') pendingAction.value = null }, 2000)
+  
   if (qrShowing.value) {
     props.sendMessage('booth-show-qr', { eventId: props.eventId })
   } else {

@@ -1116,6 +1116,12 @@ export class BoothApp {
     try {
       console.log(`[BoothApp] goLive() — cameraMode="${this.cameraMode}"`)
       this.landingEl.style.display = 'none'
+      
+      this.photoPreview.hide()
+      this.previewWindow.style.display = 'flex'
+      this.statusBar.style.display = 'flex'
+      this.postCaptureEl.style.display = 'none'
+      this.postCaptureEl.src = ''
 
       if (this.settingsData.audioDeviceId) {
         await this.audio.setSinkId(this.settingsData.audioDeviceId)
@@ -1288,8 +1294,8 @@ export class BoothApp {
       this.currentPaths = []
 
       if (this.cameraMode === 'dslr') {
-        await this.dslrPreview.stop()
-        await window.snapsync?.endDslrSession()
+        this.dslrPreview.stop().catch(() => {})
+        window.snapsync?.endDslrSession().catch(() => {})
       }
       this.camera.stop()
     } finally {
@@ -1518,6 +1524,7 @@ export class BoothApp {
     if (this.isCapturing || indices.length === 0) return
     this.pendingRetakes = indices
     
+    this.photoPreview.hide()
     this.postCaptureEl.style.display = 'none'
     this.postCaptureEl.src = ''
     
@@ -1552,6 +1559,8 @@ export class BoothApp {
     this.isCapturing = true
     this._state = 'capturing'
     this.emitBoothStateFull()
+    
+    this.photoPreview.hide()
     this.captureBtn.style.visibility = 'hidden'
     this.pauseBtn.style.display = 'flex'
     this.stateDisplay.textContent = ''
