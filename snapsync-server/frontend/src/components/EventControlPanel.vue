@@ -70,8 +70,8 @@
         <!-- Progress Bar at bottom -->
         <div style="position: absolute; bottom: 0; left: 0; height: 4px; background: var(--color-text);"
              :style="{ 
-               width: boothState?.countdown !== undefined && maxCountdown > 0 ? `${(boothState?.countdown / maxCountdown) * 100}%` : '0%',
-               transition: boothState?.countdown === maxCountdown || maxCountdown === 0 ? 'none' : 'width 1s linear'
+               width: boothState?.countdown !== undefined && maxCountdown > 0 ? `${(Math.max(0, boothState?.countdown - 1) / maxCountdown) * 100}%` : '100%',
+               transition: boothState?.countdown === undefined ? 'none' : 'width 1s linear'
              }">
         </div>
       </div>
