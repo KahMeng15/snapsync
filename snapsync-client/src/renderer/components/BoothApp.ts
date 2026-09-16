@@ -226,7 +226,13 @@ export class BoothApp {
       background: '#fff', color: '#000', border: 'none', borderRadius: '100px',
       cursor: 'pointer', pointerEvents: 'all',
     })
-    this.captureBtn.addEventListener('click', () => this.startCapture())
+    this.captureBtn.addEventListener('click', () => {
+      if (this.isCapturing) {
+        this.handleBoothCommand({ type: 'cancel-countdown' })
+      } else {
+        this.startCapture()
+      }
+    })
 
     // Right-side action buttons container
     this.statusActions = document.createElement('div')
@@ -791,11 +797,15 @@ export class BoothApp {
       if (this.isLive && !this.isCapturing) this.startCapture()
     } else if (cmd.type === 'cancel-countdown') {
       this.sessionAbortController?.abort()
-      this.hideCaptureProgress()
+      this.showCaptureProgress(this.settingsData.photoCount, 0)
+      this.captureProgressText.textContent = `Shot 1 of ${this.settingsData.photoCount}`
       this.pauseBtn.style.display = 'none'
       this.isCapturing = false
       this._state = 'live'
       this.currentPaths = []
+      this.captureBtn.textContent = 'Start'
+      this.captureBtn.style.display = 'block'
+      this.captureBtn.style.visibility = 'visible'
       this.emitBoothStateFull()
     } else if (cmd.type === 'stop') {
       this.sessionAbortController?.abort()
@@ -1130,6 +1140,7 @@ export class BoothApp {
       this.isLive = true
       this._state = 'live'
       this.emitBoothStateFull()
+      this.captureBtn.textContent = 'Start'
       this.captureBtn.style.display = 'block'
       this.captureBtn.style.visibility = 'visible'
       this.statusBar.appendChild(this.captureBtn)
@@ -1334,7 +1345,8 @@ export class BoothApp {
     this.isCapturing = true
     this._state = 'capturing'
     this.emitBoothStateFull()
-    this.captureBtn.style.visibility = 'hidden'
+    this.captureBtn.textContent = 'Cancel'
+    this.captureBtn.style.visibility = 'visible'
     this.pauseBtn.style.display = 'flex'
     this.stateDisplay.textContent = ''
 

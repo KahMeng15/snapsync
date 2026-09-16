@@ -220,13 +220,13 @@ watch(currentState, (newVal) => {
   if (newVal === 'idle' || newVal === 'preview') {
     // Booth camera is off, turn off the remote stream viewer
     if (previewEnabled.value) {
-      stopPreview()
+      pausePreview()
     }
   }
 
   // Automatically re-request stream if booth wakes up and we already want the stream
   if (newVal === 'live' && previewEnabled.value) {
-    stopPreview()
+    pausePreview()
     setTimeout(() => {
       startPreview()
     }, 100)
@@ -304,16 +304,20 @@ function onSourceOpen() {
   }
 }
 
-function stopPreview() {
-  previewEnabled.value = false
+function pausePreview() {
   videoPlaying.value = false
   props.sendMessage('stop-preview', { eventId: props.eventId })
   if (mediaSource && mediaSource.readyState === 'open') {
-    mediaSource.endOfStream()
+    try { mediaSource.endOfStream() } catch (e) {}
   }
   sourceBuffer = null
   mediaSource = null
   sourceBufferQueue = []
+}
+
+function stopPreview() {
+  previewEnabled.value = false
+  pausePreview()
 }
 
 function processBufferQueue() {
