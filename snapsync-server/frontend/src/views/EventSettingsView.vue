@@ -62,23 +62,23 @@
       
       <section class="card">
         <h2>Motivational Messages</h2>
-        <p class="card-desc">Messages displayed during the snapsync session. Leave blank to inherit system defaults.</p>
+        <p class="card-desc">Messages displayed during the snapsync session. These have been pre-filled with the system defaults for you to edit.</p>
         <div class="settings-box">
           <div class="field-row-col">
             <label >Homepage Hero Message</label>
-            <textarea v-model="eventMessages.msgHomepage" class="text-input textarea-input" placeholder="Leave blank to use default messages\nOne message per line"></textarea>
+            <textarea v-model="eventMessages.msgHomepage" class="text-input textarea-input" placeholder="One message per line"></textarea>
           </div>
           <div class="field-row-col">
             <label >During Countdown</label>
-            <textarea v-model="eventMessages.msgCountdown" class="text-input textarea-input" placeholder="Leave blank to use default messages\nOne message per line"></textarea>
+            <textarea v-model="eventMessages.msgCountdown" class="text-input textarea-input" placeholder="One message per line"></textarea>
           </div>
           <div class="field-row-col">
             <label >After Session (Review Screen)</label>
-            <textarea v-model="eventMessages.msgPostSession" class="text-input textarea-input" placeholder="Leave blank to use default messages\nOne message per line"></textarea>
+            <textarea v-model="eventMessages.msgPostSession" class="text-input textarea-input" placeholder="One message per line"></textarea>
           </div>
           <div class="field-row-col">
             <label >Share Page Title</label>
-            <textarea v-model="eventMessages.msgShareTitle" class="text-input textarea-input" placeholder="Leave blank to use default messages\nOne message per line"></textarea>
+            <textarea v-model="eventMessages.msgShareTitle" class="text-input textarea-input" placeholder="One message per line"></textarea>
           </div>
           <div class="field-row">
             <label>Message Order</label>
@@ -353,6 +353,18 @@ onMounted(async () => {
       msgShareTitle: arrayToLines(ev.msg_share_title),
       msgOrder: ev.msg_order || 'random'
     }
+
+    try {
+      const { data: gData } = await axios.get('/api/admin/global-messages')
+      if (!eventMessages.value.msgHomepage) eventMessages.value.msgHomepage = arrayToLines(gData.msgHomepage)
+      if (!eventMessages.value.msgCountdown) eventMessages.value.msgCountdown = arrayToLines(gData.msgCountdown)
+      if (!eventMessages.value.msgPostSession) eventMessages.value.msgPostSession = arrayToLines(gData.msgPostSession)
+      if (!eventMessages.value.msgShareTitle) eventMessages.value.msgShareTitle = arrayToLines(gData.msgShareTitle)
+      if (!ev.msg_order && gData.msgOrder) eventMessages.value.msgOrder = gData.msgOrder
+    } catch (err) {
+      console.warn('Could not fetch global messages', err)
+    }
+
     if (ev.expiry_type === 'relative' && ev.expiry_value) {
       const parts = ev.expiry_value.split('_')
       if (parts.length === 2) {
