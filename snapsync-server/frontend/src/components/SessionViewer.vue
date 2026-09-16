@@ -238,7 +238,7 @@ const showManageSharesModal = ref(false)
 const shares = ref<any[]>([])
 
 const origin = window.location.origin
-const shareBaseUrl = import.meta.env.VITE_SHARE_BASE_URL || (origin + baseUrl + '/share')
+const shareBaseUrl = (window as any).__env__?.VITE_SHARE_BASE_URL || import.meta.env.VITE_SHARE_BASE_URL || (origin + baseUrl + '/share')
 
 const activeFrames = ref<any[]>([])
 const selectedFrameId = ref<string>('')

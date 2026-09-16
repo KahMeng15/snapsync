@@ -111,6 +111,7 @@
         :show="showPanel"
         :send-message="sendMessage"
         :booth-state="boothState"
+        :ws="ws"
         :total-sessions="photoSessions.length"
         :total-photos="photoSessions.reduce((sum, s) => sum + s.photoCount, 0)"
         @close="showPanel = false"

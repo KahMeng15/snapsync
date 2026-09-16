@@ -7,6 +7,7 @@ import helmet from 'helmet'
 import cors from 'cors'
 import path from 'path'
 import jwt from 'jsonwebtoken'
+import fs from 'fs'
 
 import authRoutes from './routes/auth'
 import uploadRoutes from './routes/upload'
@@ -67,7 +68,7 @@ app.use(setCsrfToken)
 app.use(requestLogger)
 
 const publicPath = path.join(process.cwd(), 'public');
-const staticOpts = { maxAge: '1y', etag: false, immutable: true };
+const staticOpts = { maxAge: '1y', etag: false, immutable: true, index: false };
 
 app.use(express.static(publicPath, staticOpts));
 
@@ -92,8 +93,9 @@ apiRouter.use('/photos', adminRateLimiter, authMiddleware, express.static(config
 
 // Legacy Share Link Redirect
 app.get('/share/:token', (req, res) => {
-  if (process.env.SHARE_BASE_URL) {
-    res.redirect(`${process.env.SHARE_BASE_URL.replace(/\/$/, '')}/share/${req.params.token}`)
+  if (process.env.VITE_SHARE_BASE_URL || process.env.SHARE_BASE_URL) {
+    const base = process.env.VITE_SHARE_BASE_URL || `${process.env.SHARE_BASE_URL!.replace(/\/$/, '')}/share`;
+    res.redirect(`${base.replace(/\/$/, '')}/${req.params.token}`)
   } else {
     res.status(404).send('Share base URL not configured')
   }
@@ -449,7 +451,24 @@ app.get('*', (req, res) => {
   if (isApi) {
     return res.status(404).json({ error: 'Not found' })
   }
-  res.sendFile(path.join(publicPath, 'index.html'))
+  
+  const indexPath = path.join(publicPath, 'index.html')
+  fs.readFile(indexPath, 'utf8', (err, data) => {
+    if (err) {
+      logger.error('Error reading index.html', err)
+      return res.status(500).send('Internal Server Error')
+    }
+    
+    // Inject runtime environment variables
+    const envVars = {
+      VITE_SHARE_BASE_URL: process.env.VITE_SHARE_BASE_URL || process.env.SHARE_BASE_URL || ''
+    }
+    
+    const envScript = `<script>window.__env__ = ${JSON.stringify(envVars)}</script>`
+    const html = data.replace('</head>', `${envScript}</head>`)
+    
+    res.send(html)
+  })
 })
 
 server.listen(config.port, () => {

@@ -51,17 +51,17 @@
           <div style="display: flex; flex-direction: column; align-items: flex-start; gap: 0.5rem;">
             <div class="phase-badge" style="margin-bottom: 0;">{{ currentPhaseLabel || 'STANDBY' }}</div>
             <div class="shot-counter" style="align-items: flex-start; flex-direction: column; gap: 0.5rem;">
-              <div class="shot-text" style="font-weight: 600;">Shot {{ boothState.currentShot || 0 }} of {{ boothState.totalShots || '-' }}</div>
+              <div class="shot-text" style="font-weight: 600;">Shot {{ boothState?.currentShot || 0 }} of {{ boothState?.totalShots || '-' }}</div>
               <div class="dots" style="gap: 0.25rem;">
-                <span v-for="i in Math.max(boothState.totalShots || 1, 1)" :key="i" class="dot" :class="{ active: i <= (boothState.currentShot || 0) }"></span>
+                <span v-for="i in Math.max(boothState?.totalShots || 1, 1)" :key="i" class="dot" :class="{ active: i <= (boothState?.currentShot || 0) }"></span>
               </div>
             </div>
           </div>
 
           <!-- Right Side: Countdown -->
           <div style="text-align: right;">
-            <div class="countdown-display" :style="{ color: ['post-photo-preview', 'time-gap'].includes(boothState.phase) ? 'var(--color-text-sub)' : 'var(--color-text)' }" style="margin-bottom: 0; font-size: 3rem; transition: color 0.3s;">
-              {{ boothState.countdown !== undefined ? boothState.countdown : '-' }}
+            <div class="countdown-display" :style="{ color: ['post-photo-preview', 'time-gap'].includes(boothState?.phase) ? 'var(--color-text-sub)' : 'var(--color-text)' }" style="margin-bottom: 0; font-size: 3rem; transition: color 0.3s;">
+              {{ boothState?.countdown !== undefined ? boothState?.countdown : '-' }}
             </div>
             <div style="font-size: 0.7rem; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.05em;">Timer</div>
           </div>
@@ -70,8 +70,8 @@
         <!-- Progress Bar at bottom -->
         <div style="position: absolute; bottom: 0; left: 0; height: 4px; background: var(--color-text);"
              :style="{ 
-               width: boothState.countdown !== undefined && maxCountdown > 0 ? `${(boothState.countdown / maxCountdown) * 100}%` : '0%',
-               transition: boothState.countdown === maxCountdown || maxCountdown === 0 ? 'none' : 'width 1s linear'
+               width: boothState?.countdown !== undefined && maxCountdown > 0 ? `${(boothState?.countdown / maxCountdown) * 100}%` : '0%',
+               transition: boothState?.countdown === maxCountdown || maxCountdown === 0 ? 'none' : 'width 1s linear'
              }">
         </div>
       </div>
@@ -82,10 +82,10 @@
         <button v-if="currentState === 'live'" class="app-btn full-width-btn btn-primary" @click="boothAction('capture')" :disabled="!connected">Start Countdown</button>
         <button v-if="currentState === 'live'" class="app-btn full-width-btn app-btn--secondary" @click="boothAction('home')" :disabled="!connected">Standby Mode</button>
         
-        <button v-if="currentState === 'capturing' && boothState.phase === 'countdown'" class="app-btn full-width-btn btn-danger" @click="boothAction('cancel-countdown')" :disabled="!connected">
+        <button v-if="currentState === 'capturing' && boothState?.phase === 'countdown'" class="app-btn full-width-btn btn-danger" @click="boothAction('cancel-countdown')" :disabled="!connected">
           Cancel Countdown
         </button>
-        <button v-if="currentState === 'capturing' && boothState.phase !== 'countdown'" class="app-btn full-width-btn btn-danger" @click="boothAction('stop')" :disabled="!connected">
+        <button v-if="currentState === 'capturing' && boothState?.phase !== 'countdown'" class="app-btn full-width-btn btn-danger" @click="boothAction('stop')" :disabled="!connected">
           Stop Session
         </button>
         <button v-if="currentState === 'preview'" class="app-btn full-width-btn btn-warning" @click="boothAction('home')" :disabled="!connected">Return to Menu</button>
@@ -115,22 +115,22 @@
         <span class="pill" v-if="uploadQueue">{{ uploadQueue.uploading }} uploading</span>
         <span class="pill" v-if="uploadQueue">{{ uploadQueue.queued }} queued</span>
         <span class="pill">
-          {{ boothState.totalSessionsUploaded || 0 }} sessions uploaded
+          {{ boothState?.totalSessionsUploaded || 0 }} sessions uploaded
         </span>
         <span class="pill">
-          {{ boothState.totalImagesUploaded || 0 }} images uploaded
+          {{ boothState?.totalImagesUploaded || 0 }} images uploaded
         </span>
       </div>
     </section>
 
     <!-- Session Photos & Retake Control -->
-    <section v-if="currentState === 'preview' && boothState.sessionPhotoPaths && boothState.sessionPhotoPaths.length > 0" class="card">
+    <section v-if="currentState === 'preview' && boothState?.sessionPhotoPaths && boothState?.sessionPhotoPaths.length > 0" class="card">
       <div class="card-header-flex">
         <h2>Session Photos</h2>
       </div>
       <div class="thumbnail-grid">
         <div 
-          v-for="(path, index) in boothState.sessionPhotoPaths" 
+          v-for="(path, index) in boothState?.sessionPhotoPaths" 
           :key="index" 
           class="thumbnail-container"
           @click="toggleRetake(index)"
@@ -145,7 +145,7 @@
         <button class="app-btn full-width-btn app-btn--secondary" @click="initiateRetake" :disabled="retakeSelection.length === 0">
           Initiate Retake ({{ retakeSelection.length }})
         </button>
-        <button v-if="boothState.shareUrl" class="app-btn full-width-btn app-btn--secondary" @click="toggleQR">
+        <button v-if="boothState?.shareUrl" class="app-btn full-width-btn app-btn--secondary" @click="toggleQR">
           {{ qrShowing ? 'Hide QR on 📺' : 'Show QR on 📺' }}
         </button>
       </div>
