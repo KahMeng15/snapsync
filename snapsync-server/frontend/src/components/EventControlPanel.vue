@@ -97,7 +97,7 @@
           <span v-if="pendingAction === 'stop'" class="app-spinner inline-spinner"></span>
           {{ pendingAction === 'stop' ? 'Stopping...' : 'Stop Session' }}
         </button>
-        <button v-if="currentState === 'preview'" class="app-btn full-width-btn btn-warning" @click="boothAction('home')" :disabled="!connected || pendingAction === 'home'">
+        <button v-if="['preview', 'retake-selection'].includes(currentState)" class="app-btn full-width-btn btn-warning" @click="boothAction('home')" :disabled="!connected || pendingAction === 'home'">
           <span v-if="pendingAction === 'home'" class="app-spinner inline-spinner"></span>
           {{ pendingAction === 'home' ? 'Returning...' : 'Return to Menu' }}
         </button>
@@ -142,7 +142,7 @@
     </section>
 
     <!-- Session Photos & Retake Control -->
-    <section v-if="currentState === 'preview' && boothState?.sessionPhotoPaths && boothState?.sessionPhotoPaths.length > 0" class="card">
+    <section v-if="['preview', 'retake-selection'].includes(currentState) && boothState?.sessionPhotoPaths && boothState?.sessionPhotoPaths.length > 0" class="card">
       <div class="card-header-flex">
         <h2>Session Photos</h2>
       </div>
@@ -160,10 +160,18 @@
         </div>
       </div>
       <div class="actions-group" style="margin-top: 1rem;">
-        <button class="app-btn full-width-btn app-btn--secondary" @click="initiateRetake" :disabled="retakeSelection.length === 0 || pendingAction === 'retake'">
-          <span v-if="pendingAction === 'retake'" class="app-spinner inline-spinner"></span>
-          {{ pendingAction === 'retake' ? 'Initiating...' : 'Initiate Retake (' + retakeSelection.length + ')' }}
+        <button v-if="boothState?.phase !== 'retake-selection'" class="app-btn full-width-btn app-btn--secondary" style="opacity: 0.5" disabled>
+          Tap a photo to select for retake
         </button>
+        <template v-else>
+          <button class="app-btn full-width-btn btn-primary" @click="initiateRetake" :disabled="retakeSelection.length === 0 || pendingAction === 'retake'" style="margin-bottom: 0.5rem">
+            <span v-if="pendingAction === 'retake'" class="app-spinner inline-spinner"></span>
+            {{ pendingAction === 'retake' ? 'Initiating...' : 'Confirm Retake (' + retakeSelection.length + ')' }}
+          </button>
+          <button class="app-btn full-width-btn app-btn--secondary" @click="cancelRetake">
+            Cancel Retake
+          </button>
+        </template>
         <button v-if="boothState?.shareUrl" class="app-btn full-width-btn app-btn--secondary" @click="toggleQR" :disabled="pendingAction === 'qr'">
           <span v-if="pendingAction === 'qr'" class="app-spinner inline-spinner"></span>
           {{ qrShowing ? 'Hide QR on Booth' : 'Show QR on Booth' }}
@@ -251,19 +259,18 @@ function togglePause(paused: boolean) {
 }
 
 // Retake logic
-const retakeSelection = ref<number[]>([])
+const retakeSelection = computed(() => props.boothState?.retakeIndices || [])
 
 watch(currentState, (newVal, oldVal) => {
   if (newVal !== oldVal) {
     pendingAction.value = null
   }
   
-  if (newVal !== 'preview') {
-    retakeSelection.value = []
+  if (newVal !== 'preview' && newVal !== 'retake-selection') {
     qrShowing.value = false
   }
   
-  if (newVal === 'idle' || newVal === 'preview') {
+  if (newVal === 'idle' || newVal === 'preview' || newVal === 'retake-selection') {
     // Booth camera is off, turn off the remote stream viewer
     if (previewEnabled.value) {
       pausePreview()
@@ -280,10 +287,18 @@ watch(currentState, (newVal, oldVal) => {
 })
 
 function toggleRetake(index: number) {
-  if (retakeSelection.value.includes(index)) {
-    retakeSelection.value = retakeSelection.value.filter(i => i !== index)
+  let newSelection = [...retakeSelection.value]
+  if (newSelection.includes(index)) {
+    newSelection = newSelection.filter(i => i !== index)
   } else {
-    retakeSelection.value.push(index)
+    newSelection.push(index)
+  }
+  
+  if (props.boothState?.phase !== 'retake-selection') {
+    // Automatically enter retake mode on the client if it's not already in it
+    props.sendMessage('booth-update-retake', { eventId: props.eventId, indices: newSelection })
+  } else {
+    props.sendMessage('booth-update-retake', { eventId: props.eventId, indices: newSelection })
   }
 }
 
@@ -292,9 +307,13 @@ function initiateRetake() {
     pendingAction.value = 'retake'
     setTimeout(() => { if (pendingAction.value === 'retake') pendingAction.value = null }, 2000)
     props.sendMessage('booth-retake', { eventId: props.eventId, indices: retakeSelection.value })
-    retakeSelection.value = []
   }
 }
+
+function cancelRetake() {
+  props.sendMessage('booth-cancel-retake', { eventId: props.eventId })
+}
+
 
 // QR Logic
 const qrShowing = ref(false)

@@ -5,8 +5,15 @@ export class PhotoPreview {
   private container: HTMLElement
   private overlay: HTMLDivElement
   private qrOverlay: HTMLDivElement
+  
+  private retakeSelectedIndices: Set<number> = new Set()
+  private retakeCheckmarks: HTMLDivElement[] = []
+  private retakeImgs: HTMLImageElement[] = []
+  private retakeConfirmBtn: HTMLButtonElement | null = null
+
   private onRetake: (indices: number[]) => void
   private onConfirm: () => void
+  private onRetakeSelectionChanged?: (indices: number[]) => void
 
   private currentPaths: string[] = []
   private lastServerUrl?: string
@@ -27,7 +34,8 @@ export class PhotoPreview {
   private progressFill?: HTMLDivElement
   private progressText?: HTMLDivElement
 
-  constructor(container: HTMLElement, onRetake: (indices: number[]) => void, onConfirm: () => void) {
+  constructor(container: HTMLElement, onRetake: (indices: number[]) => void, onConfirm: () => void, onRetakeSelectionChanged?: (indices: number[]) => void) {
+    this.onRetakeSelectionChanged = onRetakeSelectionChanged
     this.container = container
     this.onRetake = onRetake
     this.onConfirm = onConfirm
@@ -210,7 +218,51 @@ export class PhotoPreview {
     }
   }
 
-  private showRetakeSelection() {
+  
+  public updateRetakeSelection(indices: number[]) {
+    if (this.overlay.dataset.mode !== 'retake') {
+      this.showRetakeSelection(indices)
+      return
+    }
+    
+    // Check if same
+    const current = Array.from(this.retakeSelectedIndices).sort()
+    const next = [...indices].sort()
+    if (current.length === next.length && current.every((v, i) => v === next[i])) {
+      return
+    }
+
+    this.retakeSelectedIndices = new Set(indices)
+    this.retakeImgs.forEach((img, idx) => {
+      if (this.retakeSelectedIndices.has(idx)) {
+        img.style.borderColor = 'var(--color-info)'
+      } else {
+        img.style.borderColor = 'transparent'
+      }
+    })
+    this.retakeCheckmarks.forEach((check, idx) => {
+      check.style.display = this.retakeSelectedIndices.has(idx) ? 'flex' : 'none'
+    })
+
+    if (this.retakeConfirmBtn) {
+      this.retakeConfirmBtn.disabled = this.retakeSelectedIndices.size === 0
+      this.retakeConfirmBtn.style.opacity = this.retakeSelectedIndices.size === 0 ? '0.5' : '1'
+      this.retakeConfirmBtn.textContent = this.retakeSelectedIndices.size > 0 ? `Retake ${this.retakeSelectedIndices.size} Photo${this.retakeSelectedIndices.size > 1 ? 's' : ''}` : 'Select Photos'
+    }
+  }
+
+  public cancelRetakeSelection() {
+    if (this.overlay.dataset.mode === 'retake') {
+      this.keydownHandlers = null
+      this.show(this.currentPaths, null, this.lastServerUrl, this.lastOtp, this.lastSessionId)
+      this.onRetakeSelectionChanged?.([])
+    }
+  }
+
+  public showRetakeSelection(initialIndices: number[] = []) {
+    this.retakeSelectedIndices = new Set(initialIndices)
+    this.retakeCheckmarks = []
+    this.retakeImgs = []
     this.overlay.dataset.mode = 'retake'
     this.overlay.innerHTML = ''
     
@@ -228,13 +280,13 @@ export class PhotoPreview {
     grid.className = 'ui-photo-retake-grid'
     grid.style.gridTemplateColumns = `repeat(${Math.min(this.currentPaths.length, 2)}, 1fr)`
 
-    const selectedIndices = new Set<number>()
+    // this.retakeSelectedIndices replaced by this.retakeSelectedIndices
     const photoWrappers: HTMLDivElement[] = []
 
     const updateConfirmBtn = () => {
-      confirmBtn.disabled = selectedIndices.size === 0
-      confirmBtn.style.opacity = selectedIndices.size === 0 ? '0.5' : '1'
-      confirmBtn.textContent = selectedIndices.size > 0 ? `Retake ${selectedIndices.size} Photo${selectedIndices.size > 1 ? 's' : ''}` : 'Select Photos'
+      confirmBtn.disabled = this.retakeSelectedIndices.size === 0
+      confirmBtn.style.opacity = this.retakeSelectedIndices.size === 0 ? '0.5' : '1'
+      confirmBtn.textContent = this.retakeSelectedIndices.size > 0 ? `Retake ${this.retakeSelectedIndices.size} Photo${this.retakeSelectedIndices.size > 1 ? 's' : ''}` : 'Select Photos'
     }
 
     this.currentPaths.forEach((p, idx) => {
@@ -244,30 +296,35 @@ export class PhotoPreview {
       
       const img = document.createElement('img')
       img.className = 'ui-photo-retake-img'
+      this.retakeImgs.push(img)
       img.src = p.startsWith('blob:') || p.startsWith('http') ? p : `file://${p}`
 
       wrapper.onmouseover = () => {
-        if (!selectedIndices.has(idx)) img.style.borderColor = 'var(--color-text-muted)'
+        if (!this.retakeSelectedIndices.has(idx)) img.style.borderColor = 'var(--color-text-muted)'
       }
       wrapper.onmouseout = () => {
-        if (!selectedIndices.has(idx)) img.style.borderColor = 'transparent'
+        if (!this.retakeSelectedIndices.has(idx)) img.style.borderColor = 'transparent'
       }
       wrapper.onclick = () => {
-        if (selectedIndices.has(idx)) {
-          selectedIndices.delete(idx)
+        if (this.retakeSelectedIndices.has(idx)) {
+          this.retakeSelectedIndices.delete(idx)
           img.style.borderColor = 'transparent'
           checkMark.style.display = 'none'
         } else {
-          selectedIndices.add(idx)
+          this.retakeSelectedIndices.add(idx)
           img.style.borderColor = 'var(--color-info)'
           checkMark.style.display = 'flex'
         }
         updateConfirmBtn()
+        this.onRetakeSelectionChanged?.(Array.from(this.retakeSelectedIndices).sort((a, b) => a - b))
       }
       
       const checkMark = document.createElement('div')
       checkMark.innerHTML = '✓'
+      checkMark.style.display = this.retakeSelectedIndices.has(idx) ? 'flex' : 'none'
+      if (this.retakeSelectedIndices.has(idx)) img.style.borderColor = 'var(--color-info)'
       checkMark.className = 'ui-photo-retake-check'
+      this.retakeCheckmarks.push(checkMark)
       
       const numBadge = document.createElement('div')
       numBadge.textContent = String(idx + 1)
@@ -294,21 +351,24 @@ export class PhotoPreview {
     cancelBtn.addEventListener('click', () => {
       this.keydownHandlers = null
       this.show(this.currentPaths, null, this.lastServerUrl, this.lastOtp, this.lastSessionId)
+      this.onRetakeSelectionChanged?.([])
     })
 
     const confirmBtn = document.createElement('button')
-    confirmBtn.disabled = true
+    this.retakeConfirmBtn = confirmBtn
+    confirmBtn.disabled = this.retakeSelectedIndices.size === 0
     confirmBtn.className = 'ui-photo-btn-confirm'
     confirmBtn.style.opacity = '0.5'
     confirmBtn.addEventListener('click', () => {
-      if (selectedIndices.size > 0) {
+      if (this.retakeSelectedIndices.size > 0) {
         this.keydownHandlers = null
         this.hide()
-        this.onRetake(Array.from(selectedIndices).sort((a, b) => a - b))
+        this.onRetake(Array.from(this.retakeSelectedIndices).sort((a, b) => a - b))
       }
     })
     
     updateConfirmBtn()
+        this.onRetakeSelectionChanged?.(Array.from(this.retakeSelectedIndices).sort((a, b) => a - b))
     
     actions.appendChild(cancelBtn)
     actions.appendChild(confirmBtn)

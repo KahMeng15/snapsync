@@ -8,12 +8,13 @@ import { Gallery } from './Gallery.js'
 import { createButton, createModal, createInput, createSpinner } from '../utils/UIKit.js'
 
 
-type BoothState = 'idle' | 'live' | 'capturing' | 'preview' | 'paused'
+type BoothState = 'idle' | 'live' | 'capturing' | 'preview' | 'paused' | 'retake-selection'
 type CameraMode = 'webcam' | 'dslr'
 
 interface BoothStateFull {
   state: BoothState
-  phase?: 'countdown' | 'taking-photo' | 'post-photo-preview' | 'post-session'
+  phase?: 'countdown' | 'taking-photo' | 'post-photo-preview' | 'post-session' | 'retake-selection'
+  retakeIndices?: number[]
   countdown?: number
   currentShot?: number
   totalShots?: number
@@ -415,7 +416,20 @@ export class BoothApp {
       (indices) => {
         this.retakePhotos(indices)
       },
-      () => this.goHome()
+      () => this.goHome(),
+      (indices) => {
+        if (indices.length === 0 && this._state !== 'retake-selection') {
+          return // Cancelled or empty before opening
+        }
+        if (indices.length === 0 && (this.photoPreview as any).overlay.dataset.mode !== 'retake') {
+          // It was cancelled
+          this._state = 'preview'
+          this.emitBoothStateFull({ phase: 'post-session', retakeIndices: [] })
+        } else {
+          this._state = 'retake-selection'
+          this.emitBoothStateFull({ phase: 'retake-selection', retakeIndices: indices })
+        }
+      }
     )
     this.offlineIndicator = new OfflineIndicator(this.container)
     this.gallery = new Gallery(this.container)
@@ -767,7 +781,7 @@ export class BoothApp {
   // Command handling
   // -------------------------------------------------------------------------
 
-  private handleBoothCommand(cmd: { type: string; settings?: any }) {
+  private handleBoothCommand(cmd: any) {
     if (cmd.type === 'capture') {
       if (this.isPaused) return
       if (!this.isLive) {
@@ -791,6 +805,24 @@ export class BoothApp {
       this.isPaused = false
       this.stateDisplay.textContent = ''
       this.emitBoothStateFull()
+    } else if (cmd.type === 'enter-retake') {
+      if (this._state === 'preview') {
+        this._state = 'retake-selection'
+        this.photoPreview.showRetakeSelection()
+        this.emitBoothStateFull({ phase: 'retake-selection', retakeIndices: [] })
+      }
+    } else if (cmd.type === 'update-retake') {
+      if (this._state === 'retake-selection' || this._state === 'preview') {
+        this._state = 'retake-selection'
+        this.photoPreview.updateRetakeSelection(cmd.indices || [])
+        this.emitBoothStateFull({ phase: 'retake-selection', retakeIndices: cmd.indices || [] })
+      }
+    } else if (cmd.type === 'cancel-retake') {
+      if (this._state === 'retake-selection') {
+        this._state = 'preview'
+        this.photoPreview.cancelRetakeSelection()
+        this.emitBoothStateFull({ phase: 'post-session' })
+      }
     } else if (cmd.type === 'go-home') {
       this.goHome()
     } else if (cmd.type === 'reshot') {

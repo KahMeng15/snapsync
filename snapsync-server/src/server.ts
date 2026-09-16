@@ -250,6 +250,19 @@ io.on('connection', (socket) => {
       forwardToBooth(data.eventId, { type: 'cancel-countdown' })
     })
 
+    
+    socket.on('booth-enter-retake', (data: { eventId: string }) => {
+      forwardToBooth(data.eventId, { type: 'enter-retake' })
+    })
+
+    socket.on('booth-update-retake', (data: { eventId: string, indices: number[] }) => {
+      forwardToBooth(data.eventId, { type: 'update-retake', indices: data.indices })
+    })
+
+    socket.on('booth-cancel-retake', (data: { eventId: string }) => {
+      forwardToBooth(data.eventId, { type: 'cancel-retake' })
+    })
+
     socket.on('booth-retake', (data: { eventId: string, indices: number[] }) => {
       forwardToBooth(data.eventId, { type: 'retake', indices: data.indices })
     })
