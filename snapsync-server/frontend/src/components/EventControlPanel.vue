@@ -18,14 +18,12 @@
         <div v-if="capacityError" class="capacity-error">
           Preview at capacity (Try again later)
         </div>
-        <video 
-          ref="videoElement" 
+        <img 
+          ref="previewImg" 
           class="preview-video" 
-          autoplay 
-          muted 
-          playsinline
           v-show="previewEnabled && !capacityError"
-        ></video>
+          alt=""
+        />
         <div v-if="previewEnabled && !capacityError && !videoPlaying" class="video-loading">
           Waiting for stream...
         </div>
@@ -264,12 +262,8 @@ const previewCollapsed = ref(true)
 const previewEnabled = ref(false)
 const capacityError = ref(false)
 const videoPlaying = ref(false)
-const videoElement = ref<HTMLVideoElement | null>(null)
-
-let mediaSource: MediaSource | null = null
-let sourceBuffer: SourceBuffer | null = null
-let sourceBufferQueue: Uint8Array[] = []
-let isAppending = false
+const previewImg = ref<HTMLImageElement | null>(null)
+let lastFrameUrl = ''
 
 function togglePreview() {
   if (previewEnabled.value) {
@@ -286,33 +280,18 @@ function startPreview() {
   previewCollapsed.value = false
 
   props.sendMessage('request-preview', { eventId: props.eventId })
-
-  if (videoElement.value) {
-    mediaSource = new MediaSource()
-    videoElement.value.src = URL.createObjectURL(mediaSource)
-    mediaSource.addEventListener('sourceopen', onSourceOpen)
-  }
-}
-
-function onSourceOpen() {
-  if (!mediaSource) return
-  try {
-    sourceBuffer = mediaSource.addSourceBuffer('video/webm;codecs=vp8')
-    sourceBuffer.addEventListener('updateend', processBufferQueue)
-  } catch (e) {
-    console.error('Error adding source buffer', e)
-  }
 }
 
 function pausePreview() {
   videoPlaying.value = false
   props.sendMessage('stop-preview', { eventId: props.eventId })
-  if (mediaSource && mediaSource.readyState === 'open') {
-    try { mediaSource.endOfStream() } catch (e) {}
+  if (lastFrameUrl) {
+    URL.revokeObjectURL(lastFrameUrl)
+    lastFrameUrl = ''
   }
-  sourceBuffer = null
-  mediaSource = null
-  sourceBufferQueue = []
+  if (previewImg.value) {
+    previewImg.value.src = ''
+  }
 }
 
 function stopPreview() {
@@ -320,31 +299,21 @@ function stopPreview() {
   pausePreview()
 }
 
-function processBufferQueue() {
-  if (!sourceBuffer || sourceBuffer.updating || sourceBufferQueue.length === 0) {
-    isAppending = false
-    return
-  }
-  isAppending = true
-  const chunk = sourceBufferQueue.shift()
-  if (chunk) {
-    try {
-      sourceBuffer.appendBuffer(chunk)
-    } catch (e) {
-      console.error('Error appending buffer', e)
-      isAppending = false
-    }
-  }
-}
-
-function handlePreviewChunk(chunk: ArrayBuffer) {
+function handlePreviewFrame(frame: ArrayBuffer) {
   if (!previewEnabled.value || capacityError.value) return
   if (!videoPlaying.value) videoPlaying.value = true
 
-  const u8 = new Uint8Array(chunk)
-  sourceBufferQueue.push(u8)
-  if (!isAppending) {
-    processBufferQueue()
+  const blob = new Blob([frame], { type: 'image/jpeg' })
+  const url = URL.createObjectURL(blob)
+  
+  if (previewImg.value) {
+    previewImg.value.onload = () => {
+      if (lastFrameUrl && lastFrameUrl !== url) {
+        URL.revokeObjectURL(lastFrameUrl)
+      }
+      lastFrameUrl = url
+    }
+    previewImg.value.src = url
   }
 }
 
@@ -355,13 +324,13 @@ function handlePreviewCapacity() {
 
 function attachWsListeners(socket: any) {
   if (!socket) return
-  socket.on('preview-chunk', handlePreviewChunk)
+  socket.on('preview-frame', handlePreviewFrame)
   socket.on('preview-capacity', handlePreviewCapacity)
 }
 
 function detachWsListeners(socket: any) {
   if (!socket) return
-  socket.off('preview-chunk', handlePreviewChunk)
+  socket.off('preview-frame', handlePreviewFrame)
   socket.off('preview-capacity', handlePreviewCapacity)
 }
 

@@ -63,8 +63,7 @@ export class BoothApp {
   private captureProgressBars!: HTMLDivElement
 
   private previewStreamCanvas!: HTMLCanvasElement
-  private previewStreamRecorder: MediaRecorder | null = null
-  private previewStreamDrawLoop: number | null = null
+  private previewStreamInterval: ReturnType<typeof setInterval> | null = null
 
   private isCapturing = false
   private landingBrandEl: HTMLHeadingElement | null = null
@@ -1055,7 +1054,7 @@ export class BoothApp {
   }
 
   private startPreviewStream() {
-    if (this.previewStreamRecorder) return
+    if (this.previewStreamInterval) return
 
     let srcW = 640
     let srcH = 480
@@ -1076,42 +1075,34 @@ export class BoothApp {
       this.previewStreamCanvas.height = 480
     }
 
-    const stream = this.previewStreamCanvas.captureStream(15)
-    this.previewStreamRecorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp8', videoBitsPerSecond: 200000 })
-    this.previewStreamRecorder.ondataavailable = (e) => {
-      if (e.data.size > 0) {
-        try { boothSocket?.emit('preview-chunk', e.data) } catch {}
+    const canvas = this.previewStreamCanvas
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    // ~12 FPS at 0.4 quality for low latency and low bandwidth (~150 KB/s)
+    this.previewStreamInterval = setInterval(() => {
+      if (!boothSocket) return
+      const w = canvas.width
+      const h = canvas.height
+      if (this.cameraMode === 'dslr') {
+        try { ctx.drawImage(this.dslrPreview.element, 0, 0, w, h) } catch {}
+      } else {
+        try { ctx.drawImage(this.webcamPreview, 0, 0, w, h) } catch {}
       }
-    }
-    this.previewStreamRecorder.start(250)
-    
-    const draw = () => {
-      if (!this.previewStreamRecorder || this.previewStreamRecorder.state === 'inactive') return
-      const ctx = this.previewStreamCanvas.getContext('2d')
-      if (ctx) {
-        const w = this.previewStreamCanvas.width
-        const h = this.previewStreamCanvas.height
-        if (this.cameraMode === 'dslr') {
-          try { ctx.drawImage(this.dslrPreview.element, 0, 0, w, h) } catch {}
-        } else {
-          try { ctx.drawImage(this.webcamPreview, 0, 0, w, h) } catch {}
-        }
-      }
-      this.previewStreamDrawLoop = requestAnimationFrame(draw)
-    }
-    draw()
+
+      canvas.toBlob((blob) => {
+        if (!blob || !boothSocket) return
+        blob.arrayBuffer().then(ab => {
+          boothSocket!.emit('preview-frame', ab)
+        }).catch(() => {})
+      }, 'image/jpeg', 0.4)
+    }, 83)
   }
 
   private stopPreviewStream() {
-    if (this.previewStreamRecorder) {
-      if (this.previewStreamRecorder.state !== 'inactive') {
-        this.previewStreamRecorder.stop()
-      }
-      this.previewStreamRecorder = null
-    }
-    if (this.previewStreamDrawLoop !== null) {
-      cancelAnimationFrame(this.previewStreamDrawLoop)
-      this.previewStreamDrawLoop = null
+    if (this.previewStreamInterval !== null) {
+      clearInterval(this.previewStreamInterval)
+      this.previewStreamInterval = null
     }
   }
 

@@ -360,11 +360,11 @@ io.on('connection', (socket) => {
       }
     })
 
-    socket.on('preview-chunk', (chunk: Buffer) => {
+    socket.on('preview-frame', (frame: Buffer) => {
       const viewers = previewViewers.get(eventId)
       if (viewers) {
         for (const sid of viewers) {
-          io.to(sid).emit('preview-chunk', chunk)
+          io.to(sid).emit('preview-frame', frame)
         }
       }
     })
