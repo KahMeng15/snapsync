@@ -112,6 +112,7 @@ export interface BoothStateFull {
   countdownValue?: number
   sessionId?: string
   sessionPhotoPaths?: string[]
+  sessionThumbnails?: string[]
   shareUrl?: string
   uploadProgress?: {
     percent: number

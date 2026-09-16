@@ -798,6 +798,55 @@ export class DslrManager {
    */
   private _childProcs: Set<import('child_process').ChildProcess> = new Set()
 
+  private originalCameraSettings: Record<string, string> = {}
+
+  public async snapshotOriginalSettings() {
+    if (this.isWindows || !this.connected) return;
+    if (Object.keys(this.originalCameraSettings).length > 0) return; // Only snapshot once per connection session
+
+    log.info('[DslrManager] Taking snapshot of original camera settings...');
+    const keysToSnapshot = ['iso', 'shutterspeed', 'aperture', 'whitebalance', '/main/capturesettings/imagequality', '/main/capturesettings/capturemode'];
+    const portArgs = this.selectedPort ? [`--port=${this.selectedPort}`] : [];
+
+    for (const key of keysToSnapshot) {
+      try {
+        const res = await this.execGphoto2(['--get-config', key, ...portArgs], 5000);
+        if (res.code === 0) {
+          const match = res.stdout.match(/Current:\s*(.+)/);
+          if (match && match[1]) {
+            this.originalCameraSettings[key] = match[1].trim();
+            log.info(`[DslrManager] Snapshotted ${key}: ${this.originalCameraSettings[key]}`);
+          }
+        }
+      } catch (e) {
+        // Ignore
+      }
+    }
+  }
+
+  public async restoreOriginalSettings() {
+    if (this.isWindows || !this.connected) return;
+    const keys = Object.keys(this.originalCameraSettings);
+    if (keys.length === 0) return;
+
+    log.info('[DslrManager] Restoring original camera settings...');
+    const configArgs: string[] = [];
+    for (const key of keys) {
+      configArgs.push('--set-config', `${key}=${this.originalCameraSettings[key]}`);
+    }
+    if (configArgs.length > 0) {
+      const portArgs = this.selectedPort ? [`--port=${this.selectedPort}`] : [];
+      const res = await this.execGphoto2([...configArgs, ...portArgs], 15000);
+      if (res.code === 0) {
+        log.ok('[DslrManager] Successfully restored original camera settings');
+      } else {
+        log.warn(`[DslrManager] Failed to restore original camera settings: ${res.stderr.trim().slice(0, 100)}`);
+      }
+    }
+    // Clear snapshot so it will be retaken upon next liveview start
+    this.originalCameraSettings = {};
+  }
+
   /** Register a child, auto-removing it when it exits. */
   private _trackChild(proc: import('child_process').ChildProcess): import('child_process').ChildProcess {
     this._childProcs.add(proc)
@@ -1555,7 +1604,7 @@ export class DslrManager {
             originalCaptureMode = match ? match[1].trim() : null
             if (originalCaptureMode && originalCaptureMode !== 'Single Shot') {
               log.warn(`[DslrManager] Sony drive mode is "${originalCaptureMode}" — forcing Single Shot to prevent burst fire`)
-              const setModeRes = await this.execGphoto2(['--set-config', '/main/capturesettings/capturemode=0', ...portArgs], 5000)
+              const setModeRes = await this.execGphoto2(['--set-config', '/main/capturesettings/capturemode=Single Shot', ...portArgs], 5000)
               if (setModeRes.code === 0) {
                 log.ok('[DslrManager] Sony drive mode set to Single Shot')
               } else {

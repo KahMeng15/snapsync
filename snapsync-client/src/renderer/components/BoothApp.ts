@@ -18,6 +18,7 @@ interface BoothStateFull {
   currentShot?: number
   totalShots?: number
   sessionPhotoPaths?: string[]
+  sessionThumbnails?: string[]
   shareUrl: string
   totalSessionsUploaded: number
   totalImagesUploaded: number
@@ -1672,6 +1673,36 @@ export class BoothApp {
     await this.uploadAndPreview()
   }
 
+  private async generateThumbnails(paths: string[]): Promise<string[]> {
+    const thumbs: string[] = []
+    for (const p of paths) {
+      try {
+        const src = p.startsWith('blob:') || p.startsWith('http') ? p : `file://${p}`
+        const img = new Image()
+        img.src = src
+        await new Promise((resolve, reject) => {
+          img.onload = resolve
+          img.onerror = reject
+        })
+        const canvas = document.createElement('canvas')
+        const maxW = 400
+        const maxH = 300
+        let w = img.width
+        let h = img.height
+        if (w > maxW) { h = Math.round((h * maxW) / w); w = maxW }
+        if (h > maxH) { w = Math.round((w * maxH) / h); h = maxH }
+        canvas.width = w
+        canvas.height = h
+        const ctx = canvas.getContext('2d')
+        ctx?.drawImage(img, 0, 0, w, h)
+        thumbs.push(canvas.toDataURL('image/jpeg', 0.5))
+      } catch (e) {
+        thumbs.push('') // fallback on error
+      }
+    }
+    return thumbs
+  }
+
   private async uploadAndPreview(options?: { archived?: boolean }) {
     const paths = this.currentPaths
     if (!this.currentSessionId) {
@@ -1700,7 +1731,8 @@ export class BoothApp {
     this.pauseBtn.style.display = 'none'
     this.isCapturing = false
     this._state = 'preview'
-    this.emitBoothStateFull({ phase: 'post-session', sessionPhotoPaths: paths })
+    const thumbnails = await this.generateThumbnails(paths)
+    this.emitBoothStateFull({ phase: 'post-session', sessionPhotoPaths: paths, sessionThumbnails: thumbnails })
     
     if (!options?.archived) {
       this.photoPreview.show(paths, null, this.settingsData.serverUrl, this.settingsData.otp, sessionId, this.sessionMessages.postSession)

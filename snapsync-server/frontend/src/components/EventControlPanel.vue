@@ -133,7 +133,7 @@
           class="thumbnail-container"
           @click="toggleRetake(index)"
         >
-          <img :src="'/api/photos/' + encodeURIComponent(path)" class="thumbnail-img" />
+          <img :src="boothState?.sessionThumbnails?.[index] || '/api/photos/' + encodeURIComponent(path)" class="thumbnail-img" />
           <div class="thumbnail-overlay" v-if="retakeSelection.includes(index)">
             <span class="checkmark">✓</span>
           </div>
