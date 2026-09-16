@@ -804,26 +804,42 @@ export class DslrManager {
     return path.join(app.getPath('userData'), 'camera-settings-snapshot.json')
   }
 
+  private static TARGET_SNAPSHOT_KEYS = new Set([
+    'iso', 'shutterspeed', 'aperture', 'whitebalance',
+    '/main/imgsettings/colortemperature',
+    '/main/capturesettings/imagequality',
+    '/main/capturesettings/capturemode'
+  ])
+
   public async snapshotOriginalSettings(): Promise<void> {
     return this.enqueue(async () => {
       if (this.isWindows || !this.connected || Object.keys(this.originalCameraSettings).length > 0) return
 
-      log.info('[DslrManager] Taking snapshot of original camera settings...')
-      const listRes = await this.execGphoto2(['--list-config', ...(this.selectedPort ? [`--port=${this.selectedPort}`] : [])], 10000)
+      log.info('[DslrManager] Taking fast snapshot of original camera settings using --list-all-config...')
+      const portArgs = this.selectedPort ? [`--port=${this.selectedPort}`] : []
+      const listRes = await this.execGphoto2(['--list-all-config', ...portArgs], 10000)
+      
       if (listRes.code !== 0) {
-        log.warn(`[DslrManager] Could not list camera settings: ${listRes.stderr.trim().slice(0, 120)}`)
+        log.warn(`[DslrManager] Could not list all configs: ${listRes.stderr.trim().slice(0, 120)}`)
         return
       }
 
-      const configKeys = [...new Set(listRes.stdout.split(/\r?\n/)
-        .map(line => line.trim())
-        .filter(key => key.startsWith('/') && !key.startsWith('/main/actions/') && !key.startsWith('/status/') && !key.startsWith('/info/')))]
-      const portArgs = this.selectedPort ? [`--port=${this.selectedPort}`] : []
-
-      for (const key of configKeys) {
-        const res = await this.execGphoto2(['--get-config', key, ...portArgs], 5000)
-        const match = res.stdout.match(/^Current:\s*(.+)$/m)
-        if (res.code === 0 && match?.[1]) this.originalCameraSettings[key] = match[1].trim()
+      const blocks = listRes.stdout.split(/(?=\n\/[a-zA-Z0-9_/]+)/)
+      for (const block of blocks) {
+        const lines = block.trim().split('\n')
+        if (lines.length > 0 && lines[0].startsWith('/')) {
+          const fullKey = lines[0].trim()
+          const shortKey = fullKey.split('/').pop() || ''
+          
+          if (DslrManager.TARGET_SNAPSHOT_KEYS.has(fullKey) || DslrManager.TARGET_SNAPSHOT_KEYS.has(shortKey)) {
+            const currentMatch = block.match(/^Current:\s*(.+)$/m)
+            if (currentMatch) {
+              const val = currentMatch[1].trim()
+              const keyToStore = DslrManager.TARGET_SNAPSHOT_KEYS.has(shortKey) ? shortKey : fullKey
+              this.originalCameraSettings[keyToStore] = val
+            }
+          }
+        }
       }
 
       if (Object.keys(this.originalCameraSettings).length > 0) {
@@ -833,7 +849,7 @@ export class DslrManager {
           settings: this.originalCameraSettings,
           savedAt: new Date().toISOString(),
         }, null, 2))
-        log.ok(`[DslrManager] Snapshotted ${Object.keys(this.originalCameraSettings).length} camera settings`)
+        log.ok(`[DslrManager] Snapshotted ${Object.keys(this.originalCameraSettings).length} target camera settings`)
       }
     })
   }
@@ -842,7 +858,17 @@ export class DslrManager {
     if (Object.keys(this.originalCameraSettings).length === 0) {
       try {
         const saved = JSON.parse(fs.readFileSync(this.cameraSettingsSnapshotPath, 'utf-8'))
-        if (saved?.settings && typeof saved.settings === 'object') this.originalCameraSettings = saved.settings
+        if (saved?.settings && typeof saved.settings === 'object') {
+          // Filter to only TARGET_SNAPSHOT_KEYS in case an old, polluted cache file is loaded
+          const filtered: Record<string, string> = {}
+          for (const [k, v] of Object.entries(saved.settings)) {
+            const shortKey = k.split('/').pop() || ''
+            if (DslrManager.TARGET_SNAPSHOT_KEYS.has(k) || DslrManager.TARGET_SNAPSHOT_KEYS.has(shortKey)) {
+              filtered[k] = v as string
+            }
+          }
+          this.originalCameraSettings = filtered
+        }
       } catch {
         return
       }
@@ -853,13 +879,24 @@ export class DslrManager {
   public async restoreOriginalSettings(): Promise<void> {
     return this.enqueue(async () => {
       if (this.isWindows || !this.connected) return
-      const settings = { ...this.originalCameraSettings }
-      if (Object.keys(settings).length === 0) return
+      
+      // Filter out irrelevant keys just to be absolutely safe against polluted memory/cache
+      const settingsToRestore: Record<string, string> = {}
+      for (const [k, v] of Object.entries(this.originalCameraSettings)) {
+        const shortKey = k.split('/').pop() || ''
+        if (DslrManager.TARGET_SNAPSHOT_KEYS.has(k) || DslrManager.TARGET_SNAPSHOT_KEYS.has(shortKey)) {
+          settingsToRestore[k] = v
+        }
+      }
 
-      log.info(`[DslrManager] Restoring ${Object.keys(settings).length} original camera settings...`)
+      if (Object.keys(settingsToRestore).length === 0) return
+
+      log.info(`[DslrManager] Restoring ${Object.keys(settingsToRestore).length} targeted original camera settings...`)
       const portArgs = this.selectedPort ? [`--port=${this.selectedPort}`] : []
       let failed = false
-      for (const [key, value] of Object.entries(settings)) {
+      
+      // Since we reduced the snapshot to just ~6 keys, sequential restore is fast enough (~6 seconds).
+      for (const [key, value] of Object.entries(settingsToRestore)) {
         const res = await this.execGphoto2(['--set-config', `${key}=${value}`, ...portArgs], 5000)
         if (res.code !== 0) {
           failed = true
@@ -869,8 +906,9 @@ export class DslrManager {
 
       if (!failed) {
         try { fs.unlinkSync(this.cameraSettingsSnapshotPath) } catch {}
-        this.originalCameraSettings = {}
-        log.ok('[DslrManager] Successfully restored original camera settings')
+        // DO NOT CLEAR this.originalCameraSettings! 
+        // We keep it in memory so that subsequent liveview startups in the same session don't need to snapshot again.
+        log.ok('[DslrManager] Successfully restored original camera settings (keeping snapshot in memory)')
       } else {
         log.warn('[DslrManager] Camera settings snapshot retained for retry after reconnect')
       }

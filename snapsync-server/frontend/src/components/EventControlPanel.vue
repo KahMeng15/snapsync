@@ -76,19 +76,39 @@
 
       <!-- Main Action Buttons -->
       <div class="actions-group" style="margin-top: 1rem;">
-        <button v-if="currentState === 'idle'" class="app-btn full-width-btn btn-primary" @click="boothAction('start')" :disabled="!connected">Wake Up Booth</button>
-        <button v-if="currentState === 'live'" class="app-btn full-width-btn btn-primary" @click="boothAction('capture')" :disabled="!connected">Start Countdown</button>
-        <button v-if="currentState === 'live'" class="app-btn full-width-btn app-btn--secondary" @click="boothAction('home')" :disabled="!connected">Standby Mode</button>
+        <button v-if="currentState === 'idle'" class="app-btn full-width-btn btn-primary" @click="boothAction('start')" :disabled="!connected || pendingAction === 'start'">
+          <span v-if="pendingAction === 'start'" class="app-spinner inline-spinner"></span>
+          {{ pendingAction === 'start' ? 'Waking up...' : 'Wake Up Booth' }}
+        </button>
+        <button v-if="currentState === 'live'" class="app-btn full-width-btn btn-primary" @click="boothAction('capture')" :disabled="!connected || pendingAction === 'capture'">
+          <span v-if="pendingAction === 'capture'" class="app-spinner inline-spinner"></span>
+          {{ pendingAction === 'capture' ? 'Starting...' : 'Start Countdown' }}
+        </button>
+        <button v-if="currentState === 'live'" class="app-btn full-width-btn app-btn--secondary" @click="boothAction('home')" :disabled="!connected || pendingAction === 'home'">
+          <span v-if="pendingAction === 'home'" class="app-spinner inline-spinner"></span>
+          {{ pendingAction === 'home' ? 'Putting on Standby...' : 'Standby Mode' }}
+        </button>
         
-        <button v-if="currentState === 'capturing' && boothState?.phase === 'countdown'" class="app-btn full-width-btn btn-danger" @click="boothAction('cancel-countdown')" :disabled="!connected">
-          Cancel Countdown
+        <button v-if="currentState === 'capturing' && boothState?.phase === 'countdown'" class="app-btn full-width-btn btn-danger" @click="boothAction('cancel-countdown')" :disabled="!connected || pendingAction === 'cancel-countdown'">
+          <span v-if="pendingAction === 'cancel-countdown'" class="app-spinner inline-spinner"></span>
+          {{ pendingAction === 'cancel-countdown' ? 'Canceling...' : 'Cancel Countdown' }}
         </button>
-        <button v-if="currentState === 'capturing' && boothState?.phase !== 'countdown'" class="app-btn full-width-btn btn-danger" @click="boothAction('stop')" :disabled="!connected">
-          Stop Session
+        <button v-if="currentState === 'capturing' && boothState?.phase !== 'countdown'" class="app-btn full-width-btn btn-danger" @click="boothAction('stop')" :disabled="!connected || pendingAction === 'stop'">
+          <span v-if="pendingAction === 'stop'" class="app-spinner inline-spinner"></span>
+          {{ pendingAction === 'stop' ? 'Stopping...' : 'Stop Session' }}
         </button>
-        <button v-if="currentState === 'preview'" class="app-btn full-width-btn btn-warning" @click="boothAction('home')" :disabled="!connected">Return to Menu</button>
-        <button v-if="currentState === 'paused'" class="app-btn full-width-btn btn-resume" @click="togglePause(false)" :disabled="!connected">Resume</button>
-        <button v-if="['idle', 'live', 'capturing'].includes(currentState) && currentState !== 'paused'" class="app-btn full-width-btn btn-pause" @click="togglePause(true)" :disabled="!connected">Pause Booth</button>
+        <button v-if="currentState === 'preview'" class="app-btn full-width-btn btn-warning" @click="boothAction('home')" :disabled="!connected || pendingAction === 'home'">
+          <span v-if="pendingAction === 'home'" class="app-spinner inline-spinner"></span>
+          {{ pendingAction === 'home' ? 'Returning...' : 'Return to Menu' }}
+        </button>
+        <button v-if="currentState === 'paused'" class="app-btn full-width-btn btn-resume" @click="togglePause(false)" :disabled="!connected || pendingAction === 'resume'">
+          <span v-if="pendingAction === 'resume'" class="app-spinner inline-spinner"></span>
+          {{ pendingAction === 'resume' ? 'Resuming...' : 'Resume' }}
+        </button>
+        <button v-if="['idle', 'live', 'capturing'].includes(currentState) && currentState !== 'paused'" class="app-btn full-width-btn btn-pause" @click="togglePause(true)" :disabled="!connected || pendingAction === 'pause'">
+          <span v-if="pendingAction === 'pause'" class="app-spinner inline-spinner"></span>
+          {{ pendingAction === 'pause' ? 'Pausing...' : 'Pause Booth' }}
+        </button>
       </div>
     </section>
 
@@ -187,7 +207,13 @@ watch(() => props.boothState?.countdown, (newVal) => {
   }
 }, { immediate: true })
 
+const pendingAction = ref<string | null>(null)
+
 function boothAction(action: string) {
+  pendingAction.value = action
+  // Safety timeout in case the network drops or client fails to transition state
+  setTimeout(() => { if (pendingAction.value === action) pendingAction.value = null }, 15000)
+
   if (action === 'start') {
     props.sendMessage('booth-start', { eventId: props.eventId })
   } else if (action === 'capture') {
@@ -202,13 +228,20 @@ function boothAction(action: string) {
 }
 
 function togglePause(paused: boolean) {
+  const action = paused ? 'pause' : 'resume'
+  pendingAction.value = action
+  setTimeout(() => { if (pendingAction.value === action) pendingAction.value = null }, 15000)
   props.sendMessage('booth-pause', { eventId: props.eventId, paused })
 }
 
 // Retake logic
 const retakeSelection = ref<number[]>([])
 
-watch(currentState, (newVal) => {
+watch(currentState, (newVal, oldVal) => {
+  if (newVal !== oldVal) {
+    pendingAction.value = null
+  }
+  
   if (newVal !== 'preview') {
     retakeSelection.value = []
     qrShowing.value = false
