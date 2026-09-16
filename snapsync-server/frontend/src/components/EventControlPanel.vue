@@ -349,19 +349,26 @@ function handlePreviewCapacity() {
   stopPreview()
 }
 
-onMounted(() => {
-  if (props.ws) {
-    props.ws.on('preview-chunk', handlePreviewChunk)
-    props.ws.on('preview-capacity', handlePreviewCapacity)
-  }
-})
+function attachWsListeners(socket: any) {
+  if (!socket) return
+  socket.on('preview-chunk', handlePreviewChunk)
+  socket.on('preview-capacity', handlePreviewCapacity)
+}
+
+function detachWsListeners(socket: any) {
+  if (!socket) return
+  socket.off('preview-chunk', handlePreviewChunk)
+  socket.off('preview-capacity', handlePreviewCapacity)
+}
+
+watch(() => props.ws, (newWs, oldWs) => {
+  if (oldWs) detachWsListeners(oldWs)
+  if (newWs) attachWsListeners(newWs)
+}, { immediate: true })
 
 onUnmounted(() => {
   stopPreview()
-  if (props.ws) {
-    props.ws.off('preview-chunk', handlePreviewChunk)
-    props.ws.off('preview-capacity', handlePreviewCapacity)
-  }
+  detachWsListeners(props.ws)
 })
 </script>
 

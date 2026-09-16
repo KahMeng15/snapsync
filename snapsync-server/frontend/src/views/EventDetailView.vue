@@ -204,7 +204,7 @@ watch(() => photosStore.selectedSession, (session) => {
 const event = ref<any>(null)
 const photoSessions = ref<any[]>([])
 const boothConnected = ref(false)
-const boothState = ref<string | null>(null)
+const boothState = ref<any>(null)
 const activeBoothError = ref<{ errorId: string, message: string, type: string } | null>(null)
 const showPanel = ref(false)
 const showArchive = ref(false)
@@ -281,7 +281,7 @@ onMounted(async () => {
 
   socket.on('booth-state', (data: any) => {
     if (data.eventId === eventId) {
-      boothState.value = data.state
+      boothState.value = data
     }
   })
 
