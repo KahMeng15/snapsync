@@ -1226,6 +1226,7 @@ export class BoothApp {
     if (this.cameraMode === 'webcam') {
       // Was DSLR, now webcam
       await this.dslrPreview.stop()
+      await window.snapsync?.endDslrSession()
       await this.startWebcamPreview()
     } else {
       // Was webcam, now DSLR
@@ -1288,6 +1289,7 @@ export class BoothApp {
 
       if (this.cameraMode === 'dslr') {
         await this.dslrPreview.stop()
+        await window.snapsync?.endDslrSession()
       }
       this.camera.stop()
     } finally {

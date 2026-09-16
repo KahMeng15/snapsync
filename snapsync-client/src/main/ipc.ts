@@ -215,7 +215,6 @@ export function initIpcHandlers(
   ipcMain.handle('start-dslr-liveview', async (): Promise<{ success: boolean; error?: string }> => {
     console.log('[IPC] start-dslr-liveview called')
     try {
-      await dslrManager.snapshotOriginalSettings()
       console.log('[IPC] Running detect before starting liveview...')
       const { connected } = await dslrManager.detect(true)
       console.log(`[IPC] detect() result: connected=${connected}, model="${dslrManager.getStatus().model}"`)
@@ -224,6 +223,9 @@ export function initIpcHandlers(
         console.warn(`[IPC] start-dslr-liveview — ${msg}`)
         return { success: false, error: msg }
       }
+
+      await dslrManager.restorePendingSettings()
+      await dslrManager.snapshotOriginalSettings()
 
       const savedSettings = getSettingsSync()
       const autoPreview = !!savedSettings.autoPreview
@@ -272,8 +274,14 @@ export function initIpcHandlers(
   ipcMain.handle('stop-dslr-liveview', async (): Promise<{ success: boolean }> => {
     console.log('[IPC] stop-dslr-liveview called')
     await dslrManager.stopLiveview()
-    await dslrManager.restoreOriginalSettings()
     console.log('[IPC] stop-dslr-liveview done')
+    return { success: true }
+  })
+
+  ipcMain.handle('end-dslr-session', async (): Promise<{ success: boolean }> => {
+    console.log('[IPC] end-dslr-session called')
+    await dslrManager.stopLiveview()
+    await dslrManager.restoreOriginalSettings()
     return { success: true }
   })
 

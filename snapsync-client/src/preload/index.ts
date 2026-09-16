@@ -19,6 +19,9 @@ contextBridge.exposeInMainWorld('snapsync', {
   /** Stop the DSLR liveview stream. */
   stopDslrLiveview: () => ipcRenderer.invoke('stop-dslr-liveview'),
 
+  /** Restore the camera settings saved at the start of the group session. */
+  endDslrSession: () => ipcRenderer.invoke('end-dslr-session'),
+
   /**
    * On-demand camera detect — used by the Settings panel Retry button.
    * Returns { connected: boolean, model: string }.

@@ -800,51 +800,89 @@ export class DslrManager {
 
   private originalCameraSettings: Record<string, string> = {}
 
-  public async snapshotOriginalSettings() {
-    if (this.isWindows || !this.connected) return;
-    if (Object.keys(this.originalCameraSettings).length > 0) return; // Only snapshot once per connection session
-
-    log.info('[DslrManager] Taking snapshot of original camera settings...');
-    const keysToSnapshot = ['iso', 'shutterspeed', 'aperture', 'whitebalance', '/main/capturesettings/imagequality', '/main/capturesettings/capturemode'];
-    const portArgs = this.selectedPort ? [`--port=${this.selectedPort}`] : [];
-
-    for (const key of keysToSnapshot) {
-      try {
-        const res = await this.execGphoto2(['--get-config', key, ...portArgs], 5000);
-        if (res.code === 0) {
-          const match = res.stdout.match(/Current:\s*(.+)/);
-          if (match && match[1]) {
-            this.originalCameraSettings[key] = match[1].trim();
-            log.info(`[DslrManager] Snapshotted ${key}: ${this.originalCameraSettings[key]}`);
-          }
-        }
-      } catch (e) {
-        // Ignore
-      }
-    }
+  private get cameraSettingsSnapshotPath(): string {
+    return path.join(app.getPath('userData'), 'camera-settings-snapshot.json')
   }
 
-  public async restoreOriginalSettings() {
-    if (this.isWindows || !this.connected) return;
-    const keys = Object.keys(this.originalCameraSettings);
-    if (keys.length === 0) return;
+  public async snapshotOriginalSettings(): Promise<void> {
+    return this.enqueue(async () => {
+      if (this.isWindows || !this.connected || Object.keys(this.originalCameraSettings).length > 0) return
 
-    log.info('[DslrManager] Restoring original camera settings...');
-    const configArgs: string[] = [];
-    for (const key of keys) {
-      configArgs.push('--set-config', `${key}=${this.originalCameraSettings[key]}`);
-    }
-    if (configArgs.length > 0) {
-      const portArgs = this.selectedPort ? [`--port=${this.selectedPort}`] : [];
-      const res = await this.execGphoto2([...configArgs, ...portArgs], 15000);
-      if (res.code === 0) {
-        log.ok('[DslrManager] Successfully restored original camera settings');
-      } else {
-        log.warn(`[DslrManager] Failed to restore original camera settings: ${res.stderr.trim().slice(0, 100)}`);
+      log.info('[DslrManager] Taking snapshot of original camera settings...')
+      const listRes = await this.execGphoto2(['--list-config', ...(this.selectedPort ? [`--port=${this.selectedPort}`] : [])], 10000)
+      if (listRes.code !== 0) {
+        log.warn(`[DslrManager] Could not list camera settings: ${listRes.stderr.trim().slice(0, 120)}`)
+        return
+      }
+
+      const configKeys = [...new Set(listRes.stdout.split(/\r?\n/)
+        .map(line => line.trim())
+        .filter(key => key.startsWith('/') && !key.startsWith('/main/actions/') && !key.startsWith('/status/') && !key.startsWith('/info/')))]
+      const portArgs = this.selectedPort ? [`--port=${this.selectedPort}`] : []
+
+      for (const key of configKeys) {
+        const res = await this.execGphoto2(['--get-config', key, ...portArgs], 5000)
+        const match = res.stdout.match(/^Current:\s*(.+)$/m)
+        if (res.code === 0 && match?.[1]) this.originalCameraSettings[key] = match[1].trim()
+      }
+
+      if (Object.keys(this.originalCameraSettings).length > 0) {
+        fs.mkdirSync(path.dirname(this.cameraSettingsSnapshotPath), { recursive: true })
+        fs.writeFileSync(this.cameraSettingsSnapshotPath, JSON.stringify({
+          model: this.cameraModel,
+          settings: this.originalCameraSettings,
+          savedAt: new Date().toISOString(),
+        }, null, 2))
+        log.ok(`[DslrManager] Snapshotted ${Object.keys(this.originalCameraSettings).length} camera settings`)
+      }
+    })
+  }
+
+  public async restorePendingSettings(): Promise<void> {
+    if (Object.keys(this.originalCameraSettings).length === 0) {
+      try {
+        const saved = JSON.parse(fs.readFileSync(this.cameraSettingsSnapshotPath, 'utf-8'))
+        if (saved?.settings && typeof saved.settings === 'object') this.originalCameraSettings = saved.settings
+      } catch {
+        return
       }
     }
-    // Clear snapshot so it will be retaken upon next liveview start
-    this.originalCameraSettings = {};
+    await this.restoreOriginalSettings()
+  }
+
+  public async restoreOriginalSettings(): Promise<void> {
+    return this.enqueue(async () => {
+      if (this.isWindows || !this.connected) return
+      const settings = { ...this.originalCameraSettings }
+      if (Object.keys(settings).length === 0) return
+
+      log.info(`[DslrManager] Restoring ${Object.keys(settings).length} original camera settings...`)
+      const portArgs = this.selectedPort ? [`--port=${this.selectedPort}`] : []
+      let failed = false
+      for (const [key, value] of Object.entries(settings)) {
+        const res = await this.execGphoto2(['--set-config', `${key}=${value}`, ...portArgs], 5000)
+        if (res.code !== 0) {
+          failed = true
+          log.warn(`[DslrManager] Failed to restore ${key}: ${res.stderr.trim().slice(0, 100)}`)
+        }
+      }
+
+      if (!failed) {
+        try { fs.unlinkSync(this.cameraSettingsSnapshotPath) } catch {}
+        this.originalCameraSettings = {}
+        log.ok('[DslrManager] Successfully restored original camera settings')
+      } else {
+        log.warn('[DslrManager] Camera settings snapshot retained for retry after reconnect')
+      }
+    })
+  }
+
+  private async forceSingleShot(): Promise<void> {
+    if (this.isWindows || !this.connected) return
+    const portArgs = this.selectedPort ? [`--port=${this.selectedPort}`] : []
+    const res = await this.execGphoto2(['--set-config', '/main/capturesettings/capturemode=Single Shot', ...portArgs], 5000)
+    if (res.code === 0) log.ok('[DslrManager] Sony drive mode set to Single Shot for the active session')
+    else log.warn(`[DslrManager] Could not set Sony drive mode to Single Shot: ${res.stderr.trim().slice(0, 100)}`)
   }
 
   /** Register a child, auto-removing it when it exits. */
@@ -1274,6 +1312,10 @@ export class DslrManager {
       await this._ensureUsbAccess(false)
     }
 
+    if (this.cameraModel.toLowerCase().includes('sony') || this.cameraModel.toLowerCase().includes('alpha')) {
+      await this.forceSingleShot()
+    }
+
     this.liveviewActive = true
 
     let firstFrameOk: boolean
@@ -1529,6 +1571,8 @@ export class DslrManager {
     }
     this.liveviewActive = false
 
+    await this.restoreOriginalSettings().catch(() => {})
+
     // Stop disconnect polling
     if (this.disconnectPollTimer) {
       clearTimeout(this.disconnectPollTimer)
@@ -1572,47 +1616,6 @@ export class DslrManager {
 
       const doCapture = async () => {
         const portArgs = this.selectedPort ? [`--port=${this.selectedPort}`] : []
-
-        // Hoisted here so proc.on('close') can reference it for post-capture restore.
-        let originalCaptureMode: string | null = null
-
-        // For Sony Alpha cameras: pre-capture config (quality + drive mode guard).
-        if (this.cameraModel.toLowerCase().includes('sony') || this.cameraModel.toLowerCase().includes('alpha')) {
-          // Set image quality to Fine (JPEG). Best-effort — not fatal if it fails.
-          const qualRes = await this.execGphoto2(['--set-config', '/main/capturesettings/imagequality=Fine', ...portArgs], 5000)
-          if (qualRes.code === 0) {
-            log.ok('[DslrManager] Set image quality to Fine (JPEG)')
-          } else {
-            log.warn(`[DslrManager] Failed to set image quality (non-fatal): ${qualRes.stderr.trim().slice(0, 80)}`)
-          }
-
-          // CRITICAL: Force Single Shot drive mode before every capture.
-          //
-          // On Sony Alpha cameras, `capture=1` holds the shutter open for the
-          // entire duration that the PTP property is set to 1. In Burst or
-          // Continuous drive mode the camera fires repeatedly at burst rate
-          // (up to 10 fps on the A7 III) until `capture=0` is sent — which
-          // can mean 18+ accidental shots during a single snapsync capture.
-          //
-          // Setting capturemode=0 (Single Shot) before firing guarantees exactly
-          // one frame regardless of whatever drive mode the user had dialed in.
-          // We restore the original mode after capture so the camera dial isn't
-          // silently changed forever.
-          const captureModeRes = await this.execGphoto2(['--get-config', '/main/capturesettings/capturemode', ...portArgs], 5000)
-          if (captureModeRes.code === 0) {
-            const match = captureModeRes.stdout.match(/Current:\s*(.+)/)
-            originalCaptureMode = match ? match[1].trim() : null
-            if (originalCaptureMode && originalCaptureMode !== 'Single Shot') {
-              log.warn(`[DslrManager] Sony drive mode is "${originalCaptureMode}" — forcing Single Shot to prevent burst fire`)
-              const setModeRes = await this.execGphoto2(['--set-config', '/main/capturesettings/capturemode=Single Shot', ...portArgs], 5000)
-              if (setModeRes.code === 0) {
-                log.ok('[DslrManager] Sony drive mode set to Single Shot')
-              } else {
-                log.warn(`[DslrManager] Failed to set Single Shot mode (non-fatal): ${setModeRes.stderr.trim().slice(0, 80)}`)
-              }
-            }
-          }
-        }
 
         // For Canon cameras: explicitly drop the mirror (viewfinder=0) in a
         // SEPARATE gphoto2 call BEFORE capture-image-and-download.
@@ -1700,15 +1703,6 @@ export class DslrManager {
                 log.ok('[DslrManager] Sony capture=0 sent — shutter released')
               } else {
                 log.warn(`[DslrManager] Sony capture=0 failed (non-fatal): ${resetRes.stderr.trim().slice(0, 80)}`)
-              }
-              // 2. Restore original drive mode
-              if (originalCaptureMode && originalCaptureMode !== 'Single Shot') {
-                const restoreRes = await this.execGphoto2(['--set-config', `/main/capturesettings/capturemode=${originalCaptureMode}`, ...portArgs], 5000)
-                if (restoreRes.code === 0) {
-                  log.ok(`[DslrManager] Sony drive mode restored to "${originalCaptureMode}"`)
-                } else {
-                  log.warn(`[DslrManager] Sony drive mode restore failed (non-fatal): ${restoreRes.stderr.trim().slice(0, 80)}`)
-                }
               }
             }
             sonyCleanup().catch(() => {})
@@ -1834,6 +1828,8 @@ export class DslrManager {
         this.mainWindow?.webContents.send('dslr-disconnected', {
           model: this.cameraModel,
         })
+      } else if (!wasConnected && this.connected) {
+        await this.restorePendingSettings()
       }
       this.pushStatus()
     }, 5000)

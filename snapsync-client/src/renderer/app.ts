@@ -18,6 +18,7 @@ declare global {
       // ----------------------------------------------------------------
       startDslrLiveview: () => Promise<{ success: boolean; error?: string }>
       stopDslrLiveview: () => Promise<{ success: boolean }>
+      endDslrSession: () => Promise<{ success: boolean }>
       detectDslr: () => Promise<{ connected: boolean; model: string; cameras?: any[]; whiteBalanceChoices?: string[] }>
       setDslrCameraPort: (port: string) => Promise<{ success: boolean }>
 
