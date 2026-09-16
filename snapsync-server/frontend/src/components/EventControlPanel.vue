@@ -14,7 +14,7 @@
       </div>
 
       <!-- Integrated Live Preview -->
-      <div class="preview-container" :class="{ 'preview-empty': !videoPlaying }" style="margin-top: 0; margin-bottom: 1.5rem;" @mouseenter="previewHover = true" @mouseleave="previewHover = false">
+      <div class="preview-container" :class="{ 'preview-empty': !videoPlaying, 'touch-overlay-active': showOverlay }" style="margin-top: 0; margin-bottom: 1.5rem;" @click="pingOverlay">
         <div v-if="capacityError" class="capacity-error">
           Preview at capacity (Try again later)
         </div>
@@ -34,7 +34,7 @@
         </div>
         
         <!-- Hover to disable -->
-        <div v-if="previewEnabled && previewHover" class="preview-overlay-btn">
+        <div v-if="previewEnabled" class="preview-overlay-btn">
           <button class="app-btn app-btn--secondary btn-sm" @click="togglePreview">
             Disable
           </button>
@@ -164,7 +164,6 @@ const props = defineProps<{
   ws: any // to attach preview-chunk listener
 }>()
 
-const previewHover = ref(false)
 const emit = defineEmits<{ retry: [] }>()
 
 const currentState = computed(() => props.boothState?.state || 'idle')
@@ -264,6 +263,36 @@ const capacityError = ref(false)
 const videoPlaying = ref(false)
 const previewImg = ref<HTMLImageElement | null>(null)
 let lastFrameUrl = ''
+
+const showOverlay = ref(false)
+let overlayTimer: any = null
+
+function pingOverlay() {
+  if (!previewEnabled.value) return
+  showOverlay.value = true
+  if (overlayTimer) clearTimeout(overlayTimer)
+  overlayTimer = setTimeout(() => {
+    showOverlay.value = false
+  }, 3000)
+}
+
+function onWindowClick(e: MouseEvent | TouchEvent) {
+  const target = e.target as HTMLElement
+  if (!target.closest('.preview-container')) {
+    showOverlay.value = false
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('click', onWindowClick)
+  window.addEventListener('touchstart', onWindowClick, { passive: true })
+})
+
+onUnmounted(() => {
+  window.removeEventListener('click', onWindowClick)
+  window.removeEventListener('touchstart', onWindowClick)
+  if (overlayTimer) clearTimeout(overlayTimer)
+})
 
 function togglePreview() {
   if (previewEnabled.value) {
@@ -614,6 +643,27 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   background: rgba(0,0,0,0.5);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s, visibility 0.2s;
+}
+@media (hover: hover) {
+  .preview-container:hover .preview-overlay-btn {
+    opacity: 1;
+    visibility: visible;
+  }
+}
+@media (hover: none) {
+  .preview-overlay-btn {
+    pointer-events: none;
+  }
+  .preview-container.touch-overlay-active .preview-overlay-btn {
+    opacity: 1;
+    visibility: visible;
+  }
+  .preview-container.touch-overlay-active .preview-overlay-btn button {
+    pointer-events: auto;
+  }
 }
 .collapse-icon {
   font-size: 0.75rem;
