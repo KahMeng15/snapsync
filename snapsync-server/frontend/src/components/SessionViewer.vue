@@ -22,21 +22,22 @@
           <div 
             v-for="i in (props.session.photoCount || 4)" 
             :key="'skeleton-'+i" 
-            class="grid-img skeleton-pulse" 
-            :style="skeletonStyle"
-          ></div>
+            class="grid-img-wrap"
+          >
+            <div class="grid-img skeleton-pulse" :style="skeletonStyle"></div>
+          </div>
         </div>
         <div v-else-if="displayPhotos.length > 0" class="photo-grid">
-          <img
-            v-for="(photo, i) in displayPhotos"
-            :key="photo.id"
-            :src="baseUrl + (photo.thumbnail || photo.url)"
-            :alt="'Photo ' + (i + 1)"
-            class="grid-img"
-            loading="lazy"
-            @load="(e) => { e.target.classList.add('loaded'); e.target.style.aspectRatio = e.target.naturalWidth + '/' + e.target.naturalHeight; }"
-            @click="openFullscreen(i)"
-          />
+          <div v-for="(photo, i) in displayPhotos" :key="photo.id" class="grid-img-wrap">
+            <img
+              :src="baseUrl + (photo.thumbnail || photo.url)"
+              :alt="'Photo ' + (i + 1)"
+              class="grid-img"
+              loading="lazy"
+              @load="(e) => { e.target.classList.add('loaded'); e.target.style.aspectRatio = e.target.naturalWidth + '/' + e.target.naturalHeight; }"
+              @click="openFullscreen(i)"
+            />
+          </div>
         </div>
         <div v-else class="empty-state">
           <p>No framed photos available. Please ensure you have run the Backfill process for this frame.</p>
@@ -252,6 +253,7 @@ const displayPhotos = computed(() => {
 })
 
 onMounted(async () => {
+  document.body.style.overflow = 'hidden'
   if (props.eventId) {
     try {
       const res = await axios.get(`/api/admin/events/${props.eventId}/frames`)
@@ -269,12 +271,23 @@ onMounted(async () => {
   await fetchShares()
 })
 
+onUnmounted(() => {
+  document.body.style.overflow = ''
+})
+
 async function fetchShares() {
   try {
     const res = await axios.get(`/api/admin/events/${props.eventId}/sessions/${props.session.sessionId}/shares`)
     shares.value = res.data.shares || []
+    
+    // EAGERLY create a share link if one doesn't exist so that copying is synchronous
+    if (shares.value.length === 0) {
+      await axios.post(`/api/admin/events/${props.eventId}/sessions/${props.session.sessionId}/shares`)
+      const res2 = await axios.get(`/api/admin/events/${props.eventId}/sessions/${props.session.sessionId}/shares`)
+      shares.value = res2.data.shares || []
+    }
   } catch (e) {
-    console.error('Failed to fetch shares', e)
+    console.error('Failed to fetch/eager create shares', e)
   }
 }
 
@@ -491,18 +504,92 @@ function handleTouchEnd(e: TouchEvent) {
   }
 }
 
+const copyToClipboard = async (text: string) => {
+  // Safari workaround: If window.ClipboardItem is available, use it (handles async contexts better on some iOS versions)
+  if (navigator.clipboard && window.ClipboardItem) {
+    try {
+      const type = 'text/plain'
+      const blob = new Blob([text], { type })
+      const data = [new ClipboardItem({ [type]: blob })]
+      await navigator.clipboard.write(data)
+      return true
+    } catch (e) {
+      console.warn('ClipboardItem failed, falling back', e)
+    }
+  }
+
+  // Standard API
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    try {
+      await navigator.clipboard.writeText(text)
+      return true
+    } catch (e) {
+      console.warn('writeText failed, falling back', e)
+    }
+  }
+  
+  // Legacy execCommand fallback for older iOS / browsers
+  try {
+    const textArea = document.createElement("textarea")
+    textArea.value = text
+    textArea.style.position = "fixed"
+    textArea.style.left = "-999999px"
+    textArea.style.top = "-999999px"
+    document.body.appendChild(textArea)
+    textArea.focus()
+    textArea.select()
+    const successful = document.execCommand('copy')
+    textArea.remove()
+    return successful
+  } catch (err) {
+    console.error('Fallback copy failed', err)
+    return false
+  }
+}
+
 async function copyPrimaryShare() {
   shareError.value = ''
   linkCopied.value = false
-  try {
-    if (shares.value.length === 0) {
-      await createNewShare()
+  
+  if (shares.value.length === 0) {
+    // If no shares, we MUST use Safari's Promise-based ClipboardItem synchronously,
+    // or else iOS will block the clipboard write after an `await`.
+    if (navigator.clipboard && window.ClipboardItem) {
+      try {
+        const textPromise = createNewShare().then(() => {
+          const s = shares.value.find((s: any) => s.is_active) || shares.value[0]
+          return new Blob([`${shareBaseUrl}/${s.id}`], { type: 'text/plain' })
+        })
+        await navigator.clipboard.write([new ClipboardItem({ 'text/plain': textPromise })])
+        linkCopied.value = true
+        toast.success('Share link copied to clipboard!')
+        setTimeout(() => { linkCopied.value = false }, 2000)
+        return
+      } catch (e) {
+        console.warn('Promise-based ClipboardItem failed', e)
+        // Fallthrough
+      }
     }
+    
+    // Fallback if ClipboardItem not supported
+    try {
+      await createNewShare()
+    } catch (e) {
+      shareError.value = 'Failed to create share link'
+      toast.error(shareError.value)
+      return
+    }
+  }
+
+  try {
     const primaryShare = shares.value.find((s: any) => s.is_active) || shares.value[0]
     if (!primaryShare) throw new Error('No shares available')
 
     shareUrl = `${shareBaseUrl}/${primaryShare.id}`
-    await navigator.clipboard.writeText(shareUrl)
+    const success = await copyToClipboard(shareUrl)
+    
+    if (!success) throw new Error('Copy failed')
+
     linkCopied.value = true
     toast.success('Share link copied to clipboard!')
     setTimeout(() => { linkCopied.value = false }, 2000)
@@ -514,7 +601,8 @@ async function copyPrimaryShare() {
 
 async function copySpecificShare(shareId: string) {
   try {
-    await navigator.clipboard.writeText(`${shareBaseUrl}/${shareId}`)
+    const success = await copyToClipboard(`${shareBaseUrl}/${shareId}`)
+    if (!success) throw new Error('Copy failed')
     toast.success('Link copied to clipboard')
   } catch (err) {
     console.error(err)
@@ -601,6 +689,7 @@ function formatTime(ts: string) {
   justify-content: center;
   z-index: 100;
   overflow: hidden;
+  overscroll-behavior: none;
 }
 
 .viewer {
@@ -706,13 +795,24 @@ function formatTime(ts: string) {
 }
 
 .photo-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  grid-auto-rows: minmax(0, 1fr);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 1.5rem;
   margin: 0;
   flex: 1;
   min-height: 0;
+  overflow-y: auto;
+  align-content: flex-start;
+  padding-bottom: 2rem;
+  overscroll-behavior: contain;
+}
+
+.grid-img-wrap {
+  width: 280px;
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .empty-state {
@@ -743,14 +843,10 @@ function formatTime(ts: string) {
 }
 
 .grid-img {
-  max-width: 100%;
-  max-height: 100%;
   width: 100%;
   height: auto;
-  align-self: center;
-  min-height: 0;
-  min-width: 0;
-  border-radius: var(--radius-lg);
+  display: block;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   transition: transform 0.2s ease, opacity 0.3s ease;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);

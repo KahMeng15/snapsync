@@ -485,7 +485,7 @@ async function downloadAll() {
   width: 280px;
   max-width: 100%;
   background: var(--color-surface);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-sm);
   overflow: hidden;
   border: 1px solid var(--color-border);
   transition: transform 0.15s;
