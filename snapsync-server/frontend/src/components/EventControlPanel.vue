@@ -49,7 +49,7 @@
           <div style="display: flex; flex-direction: column; align-items: flex-start; gap: 0.5rem;">
             <div class="phase-badge" style="margin-bottom: 0;">{{ currentPhaseLabel || 'STANDBY' }}</div>
             <div class="shot-counter" style="align-items: flex-start; flex-direction: column; gap: 0.5rem;">
-              <div class="shot-text" style="font-weight: 600;">Shot {{ boothState?.currentShot || 0 }} of {{ boothState?.totalShots || '-' }}</div>
+              <div class="shot-text" style="font-weight: 600;">{{ boothState?.isRetake ? 'Retake' : 'Shot' }} {{ boothState?.currentShot || 0 }} of {{ boothState?.totalShots || '-' }}</div>
               <div class="dots" style="gap: 0.25rem;">
                 <span v-for="i in Math.max(boothState?.totalShots || 1, 1)" :key="i" class="dot" :class="{ active: i <= (boothState?.currentShot || 0) }"></span>
               </div>

@@ -15,6 +15,7 @@ interface BoothStateFull {
   state: BoothState
   phase?: 'countdown' | 'taking-photo' | 'post-photo-preview' | 'post-session' | 'retake-selection'
   retakeIndices?: number[]
+  isRetake?: boolean
   countdown?: number
   currentShot?: number
   totalShots?: number
@@ -796,7 +797,7 @@ export class BoothApp {
       const paused = (cmd as any).paused !== false
       this.isPaused = paused
       this.stateDisplay.textContent = paused ? 'PAUSED' : ''
-      this.emitBoothStateFull()
+      this.emitBoothStateFull({ phase: undefined, retakeIndices: [] })
     } else if (cmd.type === 'pause') {
       this.isPaused = true
       this.stateDisplay.textContent = 'PAUSED'
@@ -1305,6 +1306,8 @@ export class BoothApp {
       this.currentFullState.currentShot = undefined
       this.currentFullState.totalShots = undefined
       this.currentFullState.sessionPhotoPaths = undefined
+      this.currentFullState.isRetake = undefined
+      this.currentFullState.retakeIndices = []
       this.emitBoothStateFull()
       
       this.isPauseActive = false
@@ -1429,6 +1432,7 @@ export class BoothApp {
       
       this.emitBoothStateFull({
         phase: 'taking-photo',
+        isRetake: true,
         countdown: undefined
       })
       
@@ -1577,7 +1581,7 @@ export class BoothApp {
 
     this.isLive = true
     this._state = 'live'
-    this.emitBoothStateFull()
+    this.emitBoothStateFull({ phase: undefined, retakeIndices: [] })
     
     this.captureBtn.style.display = 'block'
     this.captureBtn.style.visibility = 'visible'
@@ -1624,8 +1628,9 @@ export class BoothApp {
       await this.countdown.play(this.settingsData.countdown, audioCtx, onPrep, () => this.waitIfPaused(), offset, countdownMsg, signal, (tick) => {
         this.emitBoothStateFull({
           phase: 'countdown',
-          currentShot: targetIndex + 1,
-          totalShots: this.settingsData.photoCount,
+          currentShot: i + 1,
+          totalShots: totalRetakes,
+          isRetake: true,
           countdown: tick === 0 ? undefined : tick
         })
       })
@@ -1633,6 +1638,7 @@ export class BoothApp {
       
       this.emitBoothStateFull({
         phase: 'taking-photo',
+        isRetake: true,
         countdown: undefined
       })
 
@@ -1775,7 +1781,7 @@ export class BoothApp {
     this.isCapturing = false
     this._state = 'preview'
     const thumbnails = await this.generateThumbnails(paths)
-    this.emitBoothStateFull({ phase: 'post-session', sessionPhotoPaths: paths, sessionThumbnails: thumbnails })
+    this.emitBoothStateFull({ phase: 'post-session', sessionPhotoPaths: paths, sessionThumbnails: thumbnails, isRetake: undefined, retakeIndices: [] })
     
     if (!options?.archived) {
       this.photoPreview.show(paths, null, this.settingsData.serverUrl, this.settingsData.otp, sessionId, this.sessionMessages.postSession)
