@@ -129,46 +129,56 @@
 
   <AppModal v-model="showManageSharesModal">
     <template #header>
-      <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; margin-right: 1rem;">
+      <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
         <h2 style="margin: 0;">Manage Share Links</h2>
         <AppButton variant="primary" size="sm" @click="createNewShare" title="New Share Link">
-          New Link
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
         </AppButton>
       </div>
     </template>
         
     <div v-if="shares.length === 0" class="empty-state">No share links available.</div>
     <div v-else class="share-list">
-      <div v-for="share in shares" :key="share.id" :class="['share-item', { 'disabled-item': !share.is_active }]">
+      <div v-for="share in shares" :key="share.id" class="share-item">
         <div class="share-info">
           <a :href="shareBaseUrl + '/' + share.id" target="_blank" class="share-url" title="Open Share Link">{{ shareBaseUrl }}/{{ share.id }}</a>
           <div class="share-date">{{ new Date(share.created_at).toLocaleString() }}</div>
         </div>
-        <div class="share-actions-dropdown">
-          <AppButton variant="icon" @click="toggleDropdown(share.id, $event)">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/>
+        <div class="share-actions">
+          <AppButton variant="icon" @click="toggleShareStatus(share)" :title="share.is_active ? 'Disable' : 'Enable'" :style="share.is_active ? '' : 'color: var(--color-text-sub);'">
+            <svg v-if="!share.is_active" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+              <circle cx="12" cy="12" r="3"></circle>
+              <line x1="1" y1="1" x2="23" y2="23"></line>
+            </svg>
+            <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+              <circle cx="12" cy="12" r="3"></circle>
             </svg>
           </AppButton>
-          <div v-if="openDropdownId === share.id" class="dropdown-menu" @click="closeDropdown">
-            <button class="dropdown-item" @click="toggleShareStatus(share.id, share.is_active)">
-              <svg v-if="!share.is_active" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle><line x1="1" y1="1" x2="23" y2="23"></line></svg>
-              <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-              {{ share.is_active ? 'Disable Link' : 'Enable Link' }}
-            </button>
-            <button class="dropdown-item" @click="copySpecificShare(share.id)">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-              Copy Link
-            </button>
-            <button class="dropdown-item" @click="showSpecificQr(share.id)">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
-              View QR Code
-            </button>
-            <button class="dropdown-item danger" @click="deleteShare(share.id)">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2-2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-              Delete Link
-            </button>
-          </div>
+          <AppButton variant="icon" @click="copySpecificShare(share.id)" title="Copy Link">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+          </AppButton>
+          <AppButton variant="icon" @click="showSpecificQr(share.id)" title="View QR Code">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="7" height="7"></rect>
+              <rect x="14" y="3" width="7" height="7"></rect>
+              <rect x="14" y="14" width="7" height="7"></rect>
+              <rect x="3" y="14" width="7" height="7"></rect>
+            </svg>
+          </AppButton>
+          <AppButton variant="danger" size="sm" @click="deleteShare(share.id)" title="Delete Link">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="3 6 5 6 21 6"></polyline>
+              <path d="M19 6v14a2 2 0 0 1-2-2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+            </svg>
+          </AppButton>
         </div>
       </div>
     </div>
@@ -176,7 +186,7 @@
     <div v-if="emailHistory.length > 0" style="margin-top: 1.5rem; border-top: 1px solid var(--color-border); padding-top: 1.5rem;">
       <h3 style="margin-top: 0; margin-bottom: 1rem; font-size: 1rem;">Email History</h3>
       <div class="share-list">
-        <div v-for="email in emailHistory" :key="email.id" :class="['share-item', { 'failed-item': email.status === 'failed', 'disabled-item': !email.shareIsActive }]">
+        <div v-for="email in emailHistory" :key="email.id" class="share-item">
           <div class="share-info">
             <div style="font-weight: 500;">{{ email.recipientEmail }}</div>
             <div class="share-date" style="display: flex; flex-direction: column; gap: 0.2rem;">
@@ -184,36 +194,6 @@
               <span>Link: <a :href="email.shareUrl" target="_blank">{{ email.shareId }}</a></span>
               <span v-if="email.status === 'failed'" style="color: var(--danger-color)">Failed: {{ email.errorMessage }}</span>
               <span v-else-if="email.status === 'sent'" style="color: var(--success-color)">Sent</span>
-            </div>
-          </div>
-          <div class="share-actions-dropdown">
-            <AppButton variant="icon" @click="toggleDropdown(email.id, $event)">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/>
-              </svg>
-            </AppButton>
-            <div v-if="openDropdownId === email.id" class="dropdown-menu" @click="closeDropdown">
-              <button class="dropdown-item" @click="resendEmail(email.recipientEmail)">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"></path><path d="M22 2l-7 20-4-9-9-4 20-7z"></path></svg>
-                Resend Email
-              </button>
-              <button class="dropdown-item" @click="toggleShareStatus(email.shareId, email.shareIsActive)">
-                <svg v-if="!email.shareIsActive" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle><line x1="1" y1="1" x2="23" y2="23"></line></svg>
-                <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-                {{ email.shareIsActive ? 'Disable Link' : 'Enable Link' }}
-              </button>
-              <button class="dropdown-item" @click="copySpecificShare(email.shareId)">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                Copy Link
-              </button>
-              <button class="dropdown-item" @click="showSpecificQr(email.shareId)">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
-                View QR Code
-              </button>
-              <button class="dropdown-item danger" @click="deleteShare(email.shareId)">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2-2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                Delete Link
-              </button>
             </div>
           </div>
         </div>
@@ -231,9 +211,7 @@
     </template>
     <div style="display: flex; flex-direction: column; gap: 0.5rem; padding: 0.5rem 0 0 0;">
       <p style="margin: 0; color: var(--color-text-sub);">Send a secure link containing the photos for this session.</p>
-      <div class="app-form-field" style="margin-bottom: 0; margin-top: 0.5rem;">
-        <input type="email" v-model="emailRecipient" placeholder="recipient@example.com" @keyup.enter="sendEmail" />
-      </div>
+      <input type="email" v-model="emailRecipient" placeholder="recipient@example.com" class="str-input" style="width: 100%; margin-top: 0.5rem;" @keyup.enter="sendEmail" />
     </div>
     <template #footer>
       <AppButton variant="secondary" @click="showEmailModal = false">Cancel</AppButton>
@@ -341,22 +319,6 @@ async function openEmailModal() {
   emailRecipient.value = ''
 }
 
-async function resendEmail(recipient: string) {
-  const toastId = toast.loading(`Resending email to ${recipient}...`)
-  try {
-    const data = await photosStore.sendSessionEmail(props.eventId, props.session.sessionId, recipient)
-    if (data.success) {
-      toast.update(toastId, { render: `Email resent to ${recipient}`, type: 'success', isLoading: false, autoClose: 3000 })
-      await fetchEmailHistory()
-    } else {
-      toast.update(toastId, { render: data.error || data.errorMessage || 'Failed to send email', type: 'error', isLoading: false, autoClose: 4000 })
-    }
-  } catch (err: any) {
-    const msg = err.response?.data?.error || err.response?.data?.message || 'Failed to send email'
-    toast.update(toastId, { render: msg, type: 'error', isLoading: false, autoClose: 4000 })
-  }
-}
-
 async function sendEmail() {
   if (!emailRecipient.value || !props.eventId) return
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailRecipient.value)) {
@@ -442,13 +404,12 @@ async function createNewShare() {
   }
 }
 
-async function toggleShareStatus(shareId: string, currentStatus: boolean) {
+async function toggleShareStatus(share: any) {
   try {
-    const nextStatus = !currentStatus
-    await axios.patch(`/api/admin/events/${props.eventId}/sessions/${props.session.sessionId}/shares/${shareId}`, { isActive: nextStatus })
+    const nextStatus = !share.is_active
+    await axios.patch(`/api/admin/events/${props.eventId}/sessions/${props.session.sessionId}/shares/${share.id}`, { isActive: nextStatus })
     toast.success(nextStatus ? 'Share link enabled' : 'Share link disabled')
     await fetchShares()
-    await fetchEmailHistory()
   } catch (e) {
     console.error('Failed to toggle share status', e)
     toast.error('Failed to update share link')
@@ -461,7 +422,6 @@ async function deleteShare(shareId: string) {
     await axios.delete(`/api/admin/events/${props.eventId}/sessions/${props.session.sessionId}/shares/${shareId}`)
     toast.success('Share link deleted')
     await fetchShares()
-    await fetchEmailHistory()
   } catch (e) {
     console.error('Failed to delete share', e)
     toast.error('Failed to delete share link')
@@ -1250,67 +1210,5 @@ function formatTime(ts: string) {
     justify-content: center;
     gap: 0.5rem;
   }
-}
-</style>
-
-<style scoped>
-.share-actions-dropdown {
-  position: relative;
-}
-.share-actions-dropdown .dropdown-menu {
-  position: absolute;
-  top: 100%;
-  bottom: auto;
-  right: 0;
-  margin-top: 0.25rem;
-  background: var(--color-surface-alt);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
-  min-width: 160px;
-  z-index: 100;
-  display: flex;
-  flex-direction: column;
-  padding: 0.25rem 0;
-}
-.share-item:last-child .share-actions-dropdown .dropdown-menu {
-  top: auto;
-  bottom: 100%;
-  margin-top: 0;
-  margin-bottom: 0.25rem;
-}
-.share-actions-dropdown .dropdown-item {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  width: 100%;
-  background: transparent;
-  border: none;
-  padding: 0.5rem 1rem;
-  color: var(--color-text);
-  font-size: var(--text-sm);
-  text-align: left;
-  cursor: pointer;
-}
-.share-actions-dropdown .dropdown-item:hover {
-  background: var(--color-border);
-}
-.share-actions-dropdown .dropdown-item.danger {
-  color: var(--color-error);
-}
-.share-actions-dropdown .dropdown-item.danger:hover {
-  background: color-mix(in srgb, var(--color-error) 15%, transparent);
-}
-</style>
-
-<style scoped>
-.share-item.disabled-item {
-  background: #000000;
-  border: 1px solid var(--color-border);
-  opacity: 0.6;
-}
-.share-item.failed-item {
-  background: color-mix(in srgb, var(--color-error) 15%, transparent);
-  border: 1px solid color-mix(in srgb, var(--color-error) 30%, transparent);
 }
 </style>

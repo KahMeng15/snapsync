@@ -516,11 +516,15 @@ router.post('/email-session', async (req: Request, res: Response) => {
   })
 
   try {
+    const { getSessionPhotoAttachments } = await import('../utils/email')
+    const attachments = await getSessionPhotoAttachments(event, sessionId)
+
     const result = await sendShareEmail({
       to: recipientEmail,
       subject: renderedSubject,
       body: renderedBody,
-      fromName: template.fromName
+      fromName: template.fromName,
+      attachments
     })
 
     updateEmailSendStatus(emailSendId, result.success ? 'sent' : 'failed', {

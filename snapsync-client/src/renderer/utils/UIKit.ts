@@ -112,3 +112,36 @@ export function createThemeToggle(): HTMLButtonElement {
   
   return btn
 }
+
+export function showToast(msg: string, type: 'success' | 'error' | 'info' = 'info', duration: number = 3000, id?: string) {
+  let container = document.querySelector('.ui-toast-container') as HTMLElement
+  if (!container) {
+    container = document.createElement('div')
+    container.className = 'ui-toast-container'
+    document.body.appendChild(container)
+  }
+
+  if (id) {
+    const existing = document.getElementById(id)
+    if (existing) {
+      existing.textContent = msg
+      existing.className = `ui-toast ui-toast-${type}`
+      if (duration > 0) setTimeout(() => existing.remove(), duration)
+      return
+    }
+  }
+
+  const toast = document.createElement('div')
+  toast.className = `ui-toast ui-toast-${type}`
+  toast.textContent = msg
+  if (id) toast.id = id
+  container.appendChild(toast)
+
+  if (duration > 0) {
+    setTimeout(() => {
+      toast.style.opacity = '0'
+      toast.style.transition = 'opacity 0.3s'
+      setTimeout(() => toast.remove(), 300)
+    }, duration)
+  }
+}

@@ -1,0 +1,19 @@
+@@ -341,2 +341,18 @@
+ }
+ 
++async function resendEmail(recipient: string) {
++  const toastId = toast.loading(`Resending email to ${recipient}...`)
++  try {
++    const data = await photosStore.sendSessionEmail(props.eventId, props.session.sessionId, recipient)
++    if (data.success) {
++      toast.update(toastId, { render: `Email resent to ${recipient}`, type: 'success', isLoading: false, autoClose: 3000 })
++      await fetchEmailHistory()
++    } else {
++      toast.update(toastId, { render: data.error || data.errorMessage || 'Failed to send email', type: 'error', isLoading: false, autoClose: 4000 })
++    }
++  } catch (err: any) {
++    const msg = err.response?.data?.error || err.response?.data?.message || 'Failed to send email'
++    toast.update(toastId, { render: msg, type: 'error', isLoading: false, autoClose: 4000 })
++  }
++}
++

@@ -721,3 +721,29 @@ input.ui-input:focus, select.ui-select:focus, textarea.ui-textarea:focus {
   margin: 0.25rem 0 0.75rem;
   font-style: italic;
 }
+
+/* Toast */
+.ui-toast-container {
+  position: fixed;
+  bottom: 2rem;
+  right: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  z-index: 9999;
+}
+.ui-toast {
+  padding: 1rem 1.5rem;
+  border-radius: var(--radius-md);
+  font-weight: 500;
+  color: white;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  animation: toastFadeIn 0.3s ease forwards;
+}
+.ui-toast-success { background-color: var(--color-success); }
+.ui-toast-error { background-color: var(--color-error); }
+.ui-toast-info { background-color: var(--color-primary); }
+@keyframes toastFadeIn {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}

@@ -60,8 +60,8 @@
 
       <footer class="share-footer">
         <p>
-          Photos taken with <a href="https://snapsync.vercel.app" target="_blank" rel="noopener noreferrer">snapsync</a>, an app project by <a href="https://kahmeng15.github.io" target="_blank" rel="noopener noreferrer">kahmeng</a>.<br/>
-          Learn more about this app at <a href="https://snapsync.vercel.app" target="_blank" rel="noopener noreferrer">snapsync.vercel.app</a>.<br/>
+          Photos taken with <a href="https://kmsnapsync.vercel.app" target="_blank" rel="noopener noreferrer">snapsync</a>, an app project by <a href="https://kahmeng15.github.io" target="_blank" rel="noopener noreferrer">kahmeng</a>.<br/>
+          Learn more about this app at <a href="https://kmsnapsync.vercel.app" target="_blank" rel="noopener noreferrer">kmsnapsync.vercel.app</a>.<br/>
           Have some feedback? Submit it <a href="https://kahmeng15.github.io/feedback/" target="_blank" rel="noopener noreferrer">here</a>.
         </p>
       </footer>
