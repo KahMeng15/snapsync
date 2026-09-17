@@ -97,6 +97,7 @@ export class BoothApp {
     liveviewRetryAttempts?: number
     shutterOffsetDelay?: number
     settingsPasscode?: string
+    emailEnabled?: number
   } = { photoCount: 4, countdown: 5, captureInterval: 1, postCapturePreview: 2, serverUrl: '', liveviewMode: 'mjpeg', autoPreview: false, liveviewRetryAttempts: 1, shutterOffsetDelay: 0, dslrWhiteBalance: 'auto', dslrWhiteBalanceKelvin: 5200 }
   private serverOnline = true
   private serverUrl = ''
@@ -1008,6 +1009,9 @@ export class BoothApp {
     if (settings) {
       this.settingsData = { ...this.settingsData, ...settings }
       this.cameraMode = (settings.cameraMode as CameraMode) || 'webcam'
+      if (typeof this.settingsData.emailEnabled !== 'undefined') {
+        this.gallery.emailEnabled = this.settingsData.emailEnabled !== 0
+      }
       console.log(`[BoothApp] mount() — cameraMode loaded from settings: "${this.cameraMode}"`)
       const otp = (settings as any).otp
       if (otp) {
@@ -1036,6 +1040,9 @@ export class BoothApp {
       if (res.ok) {
         const data = await res.json()
         this.settingsData = { ...this.settingsData, ...data }
+        if (typeof data.emailEnabled !== 'undefined') {
+          this.gallery.emailEnabled = data.emailEnabled !== 0
+        }
         window.snapsync?.saveSettings(this.settingsData)
         this.updateLandingText()
       }

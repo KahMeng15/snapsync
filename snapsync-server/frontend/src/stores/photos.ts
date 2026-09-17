@@ -219,6 +219,36 @@ export const usePhotosStore = defineStore('photos', () => {
     }
   }
 
+  async function updateActiveFrames(activeIds: string[]) {
+    try {
+      await axios.patch('/api/admin/frames/active', { activeIds })
+      await fetchFrames()
+    } catch (err) {
+      console.error('Failed to update active frames', err)
+      throw err
+    }
+  }
+
+  async function fetchSessionEmails(eventId: string, sessionId: string) {
+    try {
+      const { data } = await axios.get(`/api/admin/events/${eventId}/sessions/${sessionId}/emails`)
+      return data
+    } catch (err) {
+      console.error('Failed to fetch session emails', err)
+      throw err
+    }
+  }
+
+  async function sendSessionEmail(eventId: string, sessionId: string, recipientEmail: string) {
+    try {
+      const { data } = await axios.post(`/api/admin/events/${eventId}/sessions/${sessionId}/email`, { recipientEmail })
+      return data
+    } catch (err) {
+      console.error('Failed to send session email', err)
+      throw err
+    }
+  }
+
   return {
     photos,
     sessions,
@@ -251,5 +281,8 @@ export const usePhotosStore = defineStore('photos', () => {
     deleteSession,
     uploadFrame,
     deleteFrame,
+    updateActiveFrames,
+    fetchSessionEmails,
+    sendSessionEmail
   }
 })

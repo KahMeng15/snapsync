@@ -90,6 +90,70 @@
         </div>
       </section>
 
+      <section class="card">
+        <h2>Email Overrides</h2>
+        <p class="card-desc">Override the global email template for this specific event.</p>
+        <div class="settings-box">
+          <div class="field-row">
+            <label>Enable Email Feature</label>
+            <div class="app-toggle">
+              <button :class="['app-toggle-btn', eventEmail.emailEnabled === 1 ? 'app-toggle-active' : '']" @click="eventEmail.emailEnabled = 1">Enabled</button>
+              <button :class="['app-toggle-btn', eventEmail.emailEnabled === 0 ? 'app-toggle-active' : '']" @click="eventEmail.emailEnabled = 0">Disabled</button>
+            </div>
+          </div>
+          <template v-if="eventEmail.emailEnabled === 1">
+            <div class="field-row-col">
+              <label>Sender Name (From)</label>
+              <input type="text" v-model="eventEmail.emailFromName" class="text-input" placeholder="Leave empty to use global default" style="width: 100%;" />
+            </div>
+            <div class="field-row-col">
+              <label>Subject</label>
+              <input type="text" v-model="eventEmail.emailSubject" class="text-input" placeholder="Leave empty to use global default" style="width: 100%;" />
+            </div>
+            <div class="field-row-col">
+              <label>Body</label>
+              <textarea v-model="eventEmail.emailBody" class="text-input textarea-input" placeholder="Leave empty to use global default" style="height: 100px;"></textarea>
+            </div>
+          </template>
+        </div>
+      </section>
+
+      <section class="card" v-if="eventEmail.emailEnabled === 1">
+        <h2>Email Variables Guide</h2>
+        <p class="card-desc">You can use these variables in your email subject and body. They will be automatically replaced with the event's actual data when the email is sent.</p>
+        
+        <div class="settings-box">
+          <div class="field-row">
+            <label style="flex: 1;"><code>{eventName}</code></label>
+            <div style="flex: 2; color: var(--color-text-light); font-size: 0.9rem;">The name of the event</div>
+          </div>
+          <div class="field-row">
+            <label style="flex: 1;"><code>{eventDate}</code></label>
+            <div style="flex: 2; color: var(--color-text-light); font-size: 0.9rem;">The date the event was created</div>
+          </div>
+          <div class="field-row">
+            <label style="flex: 1;"><code>{eventTime}</code></label>
+            <div style="flex: 2; color: var(--color-text-light); font-size: 0.9rem;">The time the event was created</div>
+          </div>
+          <div class="field-row">
+            <label style="flex: 1;"><code>{photoCount}</code></label>
+            <div style="flex: 2; color: var(--color-text-light); font-size: 0.9rem;">Number of photos taken in the session</div>
+          </div>
+          <div class="field-row">
+            <label style="flex: 1;"><code>{shareUrl}</code></label>
+            <div style="flex: 2; color: var(--color-text-light); font-size: 0.9rem;">The unique link to view and download the photos</div>
+          </div>
+          <div class="field-row">
+            <label style="flex: 1;"><code>{organizer}</code></label>
+            <div style="flex: 2; color: var(--color-text-light); font-size: 0.9rem;">The organizer's name (from Settings)</div>
+          </div>
+          <div class="field-row">
+            <label style="flex: 1;"><code>{contactInfo}</code></label>
+            <div style="flex: 2; color: var(--color-text-light); font-size: 0.9rem;">The contact information (from Settings)</div>
+          </div>
+        </div>
+      </section>
+
       <section class="card" v-if="authStore.user?.role === 'admin'">
         <div class="card-header-flex">
           <div>
@@ -313,9 +377,14 @@ const eventMessages = ref({
   msgOrder: 'random'
 })
 
+const eventEmail = ref({
+  emailEnabled: 1,
+  emailSubject: '',
+  emailBody: '',
+  emailFromName: ''
+})
 
-
-function arrayToLines(jsonStr) {
+function arrayToLines(jsonStr: any) {
   if (!jsonStr) return ''
   try {
     const arr = JSON.parse(jsonStr)
@@ -324,11 +393,10 @@ function arrayToLines(jsonStr) {
   return ''
 }
 
-function linesToArray(lines) {
-  const arr = lines.split('\n').map(l => l.trim()).filter(l => l.length > 0)
+function linesToArray(lines: any) {
+  const arr = lines.split('\n').map((l: string) => l.trim()).filter((l: string) => l.length > 0)
   return arr.length > 0 ? JSON.stringify(arr) : null
 }
-
 
 
 const settingsSaving = ref(false)
@@ -353,6 +421,12 @@ onMounted(async () => {
       msgShareTitle: arrayToLines(ev.msg_share_title),
       msgOrder: ev.msg_order || 'random'
     }
+    eventEmail.value = {
+      emailEnabled: ev.email_enabled !== undefined ? ev.email_enabled : 1,
+      emailSubject: ev.email_subject || '',
+      emailBody: ev.email_body || '',
+      emailFromName: ev.email_from_name || ''
+    }
 
     try {
       const { data: gData } = await axios.get('/api/admin/global-messages')
@@ -370,7 +444,6 @@ onMounted(async () => {
       if (parts.length === 2) {
         relativeNumber.value = parseInt(parts[0]) || 1
         let u = parts[1]
-        // Map legacy units just in case
         if (u === 'day') u = 'days'
         if (u === 'week') u = 'weeks'
         if (u === 'month') u = 'months'
@@ -406,7 +479,11 @@ async function saveSettings() {
       msgCountdown: linesToArray(eventMessages.value.msgCountdown),
       msgPostSession: linesToArray(eventMessages.value.msgPostSession),
       msgShareTitle: linesToArray(eventMessages.value.msgShareTitle),
-      msgOrder: eventMessages.value.msgOrder
+      msgOrder: eventMessages.value.msgOrder,
+      emailEnabled: eventEmail.value.emailEnabled,
+      emailSubject: eventEmail.value.emailSubject || null,
+      emailBody: eventEmail.value.emailBody || null,
+      emailFromName: eventEmail.value.emailFromName || null
     })
     toast.success('Settings saved successfully')
   } catch {

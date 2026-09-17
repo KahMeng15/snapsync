@@ -92,6 +92,10 @@ export declare function getEvent(id: string): {
     expiry_value: string;
     organizer: string;
     contact_info: string;
+    email_subject: string | null;
+    email_body: string | null;
+    email_from_name: string | null;
+    email_enabled: number;
     operator_password?: string;
     created_at: string;
 } | undefined;
@@ -117,6 +121,10 @@ export declare function getEventByOtp(otp: string): {
     expiry_value: string;
     organizer: string;
     contact_info: string;
+    email_subject: string | null;
+    email_body: string | null;
+    email_from_name: string | null;
+    email_enabled: number;
     created_at: string;
     share_originals: number;
 } | undefined;
@@ -142,6 +150,10 @@ export declare function listEvents(includeEnded?: boolean): Array<{
     expiry_value: string;
     organizer: string;
     contact_info: string;
+    email_subject: string | null;
+    email_body: string | null;
+    email_from_name: string | null;
+    email_enabled: number;
     created_at: string;
     share_originals: number;
 }>;
@@ -203,6 +215,10 @@ export declare function getGlobalSettings(): {
     bwLimitAdmin: any;
     bwLimitShare: any;
     lockoutDuration: any;
+    remotePreviewMaxViewers: any;
+    emailSubjectDefault: any;
+    emailBodyDefault: any;
+    emailFromName: any;
 };
 export declare function updateGlobalSettings(settings: {
     photoCount: number;
@@ -222,6 +238,7 @@ export declare function updateGlobalSettings(settings: {
     bwLimitAdmin?: number;
     bwLimitShare?: number;
     lockoutDuration?: number;
+    remotePreviewMaxViewers?: number;
 }): void;
 export declare function getCameraSettings(model: string): {
     dslrIso: string;
@@ -267,11 +284,12 @@ export declare function getEventAnalytics(eventId: string): {
 };
 export declare function findUserByEmail(email: string): any;
 export declare function findUserById(id: string): any;
-export declare function insertUser(id: string, email: string, passwordHash: string, role: string, name?: string, isDisabled?: number): void;
+export declare function insertUser(id: string, email: string, passwordHash: string, role: string, name?: string, isDisabled?: number, isSuperAdmin?: number): void;
 export declare function getAllUsers(): unknown[];
 export declare function deleteUser(id: string): void;
 export declare function countUsers(): any;
-export declare function updateUser(id: string, name: string, email: string, passwordHash: string, role: string, isDisabled: number): void;
+export declare function updateUser(id: string, name: string, email: string, passwordHash: string, role: string, isDisabled: number, isSuperAdmin: number): void;
+export declare function clearSuperAdmins(): void;
 export declare function setEventShareOriginals(id: string, value: number): void;
 export declare function getOrCreateEventShareToken(eventId: string): string;
 export declare function getEventIdByShareToken(token: string): string | null;
@@ -299,3 +317,46 @@ export declare function updateEventMessages(eventId: string, msgs: {
     msgOrder: string;
 }): void;
 export declare function updateSessionShareTitle(sessionId: string, shareTitle: string): void;
+export declare function createEmailSend(data: {
+    sessionId: string;
+    eventId: string;
+    shareId: string;
+    recipientEmail: string;
+    sentByName?: string;
+}): string;
+export declare function getEmailSendsBySession(sessionId: string): Array<{
+    id: string;
+    session_id: string;
+    event_id: string;
+    share_id: string;
+    recipient_email: string;
+    status: "pending" | "sent" | "failed";
+    error_code: string | null;
+    error_message: string | null;
+    sent_at: string | null;
+    created_at: string;
+    sent_by_name: string | null;
+    share_is_active: number;
+}>;
+export declare function updateEmailSendStatus(id: string, status: 'sent' | 'failed', opts?: {
+    errorCode?: string;
+    errorMessage?: string;
+    sentAt?: string;
+}): void;
+export declare function getGlobalEmailDefaults(): {
+    emailSubject: any;
+    emailBody: any;
+    emailFromName: any;
+};
+export declare function updateGlobalEmailDefaults(data: {
+    emailSubject: string | null;
+    emailBody: string | null;
+    emailFromName: string | null;
+}): void;
+export declare function updateEventEmailSettings(eventId: string, data: {
+    emailSubject?: string | null;
+    emailBody?: string | null;
+    emailFromName?: string | null;
+    emailEnabled?: number;
+}): void;
+export declare function resolveEmailTemplate(event: any, globals: any, field: 'email_subject' | 'email_body' | 'email_from_name'): string | null;

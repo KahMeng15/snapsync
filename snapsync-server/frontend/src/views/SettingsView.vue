@@ -154,6 +154,72 @@
         </div>
       </section>
 
+      <section class="card">
+        <h2>Email Settings</h2>
+        <p class="card-desc">Configure the default email template when sending photos via email.</p>
+        
+        <div class="settings-box">
+          <div class="field-row">
+            <label>SMTP Status</label>
+            <div style="flex: 2; display: flex; align-items: center; justify-content: flex-end; gap: 1rem;">
+              <span v-if="smtpStatus.configured" class="status-pill pill-success">✓ Configured — {{ smtpStatus.host }}:{{ smtpStatus.port }}</span>
+              <span v-else class="status-pill pill-warning" style="margin-left: 1rem;">✗ Not Configured — Add SMTP_* variables to .env</span>
+              <AppButton variant="secondary" @click="testSmtp" :disabled="!smtpStatus.configured || sendingTest">
+                {{ sendingTest ? 'Sending...' : 'Test SMTP' }}
+              </AppButton>
+            </div>
+          </div>
+          <div class="field-row-col">
+            <label>Sender Name (From)</label>
+            <input type="text" v-model="emailDefaults.emailFromName" class="str-input" :placeholder="smtpStatus?.fromName || 'SnapSync Photo Booth'" style="width: 100%; text-align: left;" />
+          </div>
+          <div class="field-row-col">
+            <label>Default Subject</label>
+            <input type="text" v-model="emailDefaults.emailSubject" class="str-input" :placeholder="emailDefaults.builtInSubject" style="width: 100%; text-align: left;" />
+          </div>
+          <div class="field-row-col">
+            <label>Default Body</label>
+            <textarea v-model="emailDefaults.emailBody" class="str-input" :placeholder="emailDefaults.builtInBody" style="width: 100%; height: 100px; text-align: left;"></textarea>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Email Variables Guide</h2>
+        <p class="card-desc">You can use these variables in your email subject and body. They will be automatically replaced with the event's actual data when the email is sent.</p>
+        
+        <div class="settings-box">
+          <div class="field-row">
+            <label style="flex: 1;"><code>{eventName}</code></label>
+            <div style="flex: 2; color: var(--color-text-light); font-size: 0.9rem;">The name of the event</div>
+          </div>
+          <div class="field-row">
+            <label style="flex: 1;"><code>{eventDate}</code></label>
+            <div style="flex: 2; color: var(--color-text-light); font-size: 0.9rem;">The date the event was created</div>
+          </div>
+          <div class="field-row">
+            <label style="flex: 1;"><code>{eventTime}</code></label>
+            <div style="flex: 2; color: var(--color-text-light); font-size: 0.9rem;">The time the event was created</div>
+          </div>
+          <div class="field-row">
+            <label style="flex: 1;"><code>{photoCount}</code></label>
+            <div style="flex: 2; color: var(--color-text-light); font-size: 0.9rem;">Number of photos taken in the session</div>
+          </div>
+          <div class="field-row">
+            <label style="flex: 1;"><code>{shareUrl}</code></label>
+            <div style="flex: 2; color: var(--color-text-light); font-size: 0.9rem;">The unique link to view and download the photos</div>
+          </div>
+          <div class="field-row">
+            <label style="flex: 1;"><code>{organizer}</code></label>
+            <div style="flex: 2; color: var(--color-text-light); font-size: 0.9rem;">The organizer's name (from Capture Defaults)</div>
+          </div>
+          <div class="field-row">
+            <label style="flex: 1;"><code>{contactInfo}</code></label>
+            <div style="flex: 2; color: var(--color-text-light); font-size: 0.9rem;">The contact information (from Capture Defaults)</div>
+          </div>
+        </div>
+      </section>
+
       <div class="actions">
         <AppButton variant="primary" @click="saveAndClose">Save</AppButton>
         <AppButton variant="secondary" @click="cancelChanges">Cancel</AppButton>
@@ -193,6 +259,11 @@ const origGlobalMessages = ref({
   msgOrder: 'random'
 })
 
+const smtpStatus = ref({ configured: false, host: '', port: 587, fromAddress: '' })
+const emailDefaults = ref({ emailSubject: '', emailBody: '', emailFromName: '', builtInSubject: '', builtInBody: '' })
+const origEmailDefaults = ref({ emailSubject: '', emailBody: '', emailFromName: '' })
+const sendingTest = ref(false)
+
 function arrayToLines(jsonStr: string) {
   if (!jsonStr) return ''
   try {
@@ -228,7 +299,10 @@ const dirty = computed(() =>
   settings.value.apiRateLimitShare !== originalSettings.value.apiRateLimitShare ||
   settings.value.bwLimitAdmin !== originalSettings.value.bwLimitAdmin ||
   settings.value.bwLimitShare !== originalSettings.value.bwLimitShare ||
-  settings.value.lockoutDuration !== originalSettings.value.lockoutDuration
+  settings.value.lockoutDuration !== originalSettings.value.lockoutDuration ||
+  emailDefaults.value.emailSubject !== origEmailDefaults.value.emailSubject ||
+  emailDefaults.value.emailBody !== origEmailDefaults.value.emailBody ||
+  emailDefaults.value.emailFromName !== origEmailDefaults.value.emailFromName
 )
 
 onMounted(async () => {
@@ -245,6 +319,25 @@ onMounted(async () => {
       globalMessages.value.msgShareTitle = arrayToLines(gData.msgShareTitle)
       globalMessages.value.msgOrder = gData.msgOrder || 'random'
       origGlobalMessages.value = { ...globalMessages.value }
+    } catch {}
+
+    try {
+      const { data: smtpData } = await axios.get('/api/admin/settings/smtp-status')
+      smtpStatus.value = smtpData
+      
+      const { data: eData } = await axios.get('/api/admin/settings/email-defaults')
+      emailDefaults.value = {
+        emailSubject: eData.emailSubject || eData.builtInSubject || '',
+        emailBody: eData.emailBody || eData.builtInBody || '',
+        emailFromName: eData.emailFromName || smtpStatus.value?.fromName || '',
+        builtInSubject: eData.builtInSubject || '',
+        builtInBody: eData.builtInBody || ''
+      }
+      origEmailDefaults.value = {
+        emailSubject: emailDefaults.value.emailSubject,
+        emailBody: emailDefaults.value.emailBody,
+        emailFromName: emailDefaults.value.emailFromName
+      }
     } catch {}
 
     if (data.serverInfo) {
@@ -275,10 +368,42 @@ async function saveAndClose() {
       origGlobalMessages.value = { ...globalMessages.value }
     }
 
+    if (emailDefaults.value.emailSubject !== origEmailDefaults.value.emailSubject ||
+        emailDefaults.value.emailBody !== origEmailDefaults.value.emailBody ||
+        emailDefaults.value.emailFromName !== origEmailDefaults.value.emailFromName) {
+      await axios.patch('/api/admin/settings/email-defaults', {
+        emailSubject: emailDefaults.value.emailSubject || null,
+        emailBody: emailDefaults.value.emailBody || null,
+        emailFromName: emailDefaults.value.emailFromName || null
+      })
+      origEmailDefaults.value = {
+        emailSubject: emailDefaults.value.emailSubject,
+        emailBody: emailDefaults.value.emailBody,
+        emailFromName: emailDefaults.value.emailFromName
+      }
+    }
+
     toast.success('Settings saved')
   } catch (err) {
     console.error('Failed to save defaults', err)
     toast.error('Failed to save settings')
+  }
+}
+
+async function testSmtp() {
+  if (sendingTest.value) return
+  sendingTest.value = true
+  try {
+    const { data } = await axios.post('/api/admin/settings/smtp-test')
+    if (data.success) {
+      toast.success('Test email sent successfully')
+    } else {
+      toast.error(data.errorMessage || 'Failed to send test email')
+    }
+  } catch (err: any) {
+    toast.error(err.response?.data?.error || 'Failed to send test email')
+  } finally {
+    sendingTest.value = false
   }
 }
 
@@ -287,6 +412,10 @@ function cancelChanges() {
     if (!confirm('You have unsaved changes. Discard them?')) return
   }
   settings.value = { ...originalSettings.value }
+  globalMessages.value = { ...origGlobalMessages.value }
+  emailDefaults.value.emailSubject = origEmailDefaults.value.emailSubject
+  emailDefaults.value.emailBody = origEmailDefaults.value.emailBody
+  emailDefaults.value.emailFromName = origEmailDefaults.value.emailFromName
 }
 </script>
 
@@ -605,4 +734,26 @@ function cancelChanges() {
   width: 100%;
 }
 
+
+
+.status-pill {
+  display: inline-block;
+  padding: 0.35rem 0.75rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  font-weight: 500;
+  border: 1px solid var(--color-border);
+}
+
+.pill-success {
+  background: rgba(74, 222, 128, 0.1);
+  color: #4ade80;
+  border-color: rgba(74, 222, 128, 0.2);
+}
+
+.pill-warning {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.2);
+}
 </style>

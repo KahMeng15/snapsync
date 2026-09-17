@@ -61,6 +61,7 @@
               {{ linkCopied ? 'Copied!' : 'Copy Share Link' }}
             </AppButton>
             <AppButton variant="secondary" @click="showPrimaryQr">QR Code</AppButton>
+            <AppButton v-if="emailEnabled" variant="secondary" @click="openEmailModal">Email</AppButton>
 
             <div class="dropdown-wrapper">
               <AppButton variant="secondary" @click="showMenu = !showMenu" style="padding: 0; width: 36px; height: 36px;">
@@ -182,8 +183,41 @@
       </div>
     </div>
 
+    <div v-if="emailHistory.length > 0" style="margin-top: 1.5rem; border-top: 1px solid var(--color-border); padding-top: 1.5rem;">
+      <h3 style="margin-top: 0; margin-bottom: 1rem; font-size: 1rem;">Email History</h3>
+      <div class="share-list">
+        <div v-for="email in emailHistory" :key="email.id" class="share-item">
+          <div class="share-info">
+            <div style="font-weight: 500;">{{ email.recipientEmail }}</div>
+            <div class="share-date" style="display: flex; flex-direction: column; gap: 0.2rem;">
+              <span>{{ new Date(email.createdAt).toLocaleString() }}</span>
+              <span>Link: <a :href="email.shareUrl" target="_blank">{{ email.shareId }}</a></span>
+              <span v-if="email.status === 'failed'" style="color: var(--danger-color)">Failed: {{ email.errorMessage }}</span>
+              <span v-else-if="email.status === 'sent'" style="color: var(--success-color)">Sent</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <template #footer>
       <AppButton variant="secondary" @click="showManageSharesModal = false">Close</AppButton>
+    </template>
+  </AppModal>
+
+  <AppModal v-model="showEmailModal" size="md">
+    <template #header>
+      <h2 style="margin: 0;">Send Email</h2>
+    </template>
+    <div style="display: flex; flex-direction: column; gap: 1rem; padding: 1rem 0;">
+      <p>Send a secure link containing the photos for this session.</p>
+      <input type="email" v-model="emailRecipient" placeholder="recipient@example.com" class="text-input" style="width: 100%;" @keyup.enter="sendEmail" />
+    </div>
+    <template #footer>
+      <AppButton variant="secondary" @click="showEmailModal = false">Cancel</AppButton>
+      <AppButton variant="primary" @click="sendEmail" :disabled="sendingEmail || !emailRecipient">
+        {{ sendingEmail ? 'Sending...' : 'Send Email' }}
+      </AppButton>
     </template>
   </AppModal>
 
@@ -245,6 +279,53 @@ const activeFrames = ref<any[]>([])
 const selectedFrameId = ref<string>('')
 const framedPhotos = ref<any[]>([])
 
+const emailEnabled = computed(() => {
+  return props.event?.email_enabled !== 0
+})
+
+const showEmailModal = ref(false)
+const emailRecipient = ref('')
+const sendingEmail = ref(false)
+const emailHistory = ref<any[]>([])
+
+async function fetchEmailHistory() {
+  if (!props.eventId) return
+  try {
+    emailHistory.value = await photosStore.fetchSessionEmails(props.eventId, props.session.sessionId)
+  } catch {
+    // Ignore error
+  }
+}
+
+async function openEmailModal() {
+  showEmailModal.value = true
+  emailRecipient.value = ''
+}
+
+async function sendEmail() {
+  if (!emailRecipient.value || !props.eventId) return
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailRecipient.value)) {
+    toast.error('Please enter a valid email address')
+    return
+  }
+  
+  sendingEmail.value = true
+  try {
+    const data = await photosStore.sendSessionEmail(props.eventId, props.session.sessionId, emailRecipient.value)
+    if (data.success) {
+      toast.success('Email sent successfully')
+      showEmailModal.value = false
+      await fetchEmailHistory()
+    } else {
+      toast.error(data.errorMessage || 'Failed to send email')
+    }
+  } catch (err: any) {
+    toast.error(err.response?.data?.error || err.response?.data?.message || 'Failed to send email')
+  } finally {
+    sendingEmail.value = false
+  }
+}
+
 const displayPhotos = computed(() => {
   if (selectedFrameId.value) {
     return framedPhotos.value
@@ -269,6 +350,7 @@ onMounted(async () => {
     }
   }
   await fetchShares()
+  await fetchEmailHistory()
 })
 
 onUnmounted(() => {

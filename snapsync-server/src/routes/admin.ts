@@ -638,7 +638,8 @@ const updateEventSchema = z.object({
       if (!parseResult.success) {
         return res.status(400).json({ error: parseResult.error.issues[0].message })
       }
-      const { name, date, description, photoCount, countdown, captureInterval, postCapturePreview, dslrIso, dslrShutterSpeed, dslrAperture, dslrFocusMode, dslrWhiteBalance, obfuscateLinks, expiryType, expiryValue, organizer, contactInfo, msgHomepage, msgCountdown, msgPostSession, msgShareTitle, msgOrder } = parseResult.data as any
+      const { name, date, description, photoCount, countdown, captureInterval, postCapturePreview, dslrIso, dslrShutterSpeed, dslrAperture, dslrFocusMode, dslrWhiteBalance, obfuscateLinks, expiryType, expiryValue, organizer, contactInfo } = parseResult.data as any
+      const { msgHomepage, msgCountdown, msgPostSession, msgShareTitle, msgOrder, emailSubject, emailBody, emailFromName, emailEnabled } = req.body as any
       updateEventById(req.params.id,
         name ?? event.name,
         date ?? event.date,
@@ -654,6 +655,15 @@ const updateEventSchema = z.object({
           msgShareTitle: msgShareTitle !== undefined ? msgShareTitle : (event as any).msg_share_title,
           msgOrder: msgOrder
         })
+      }
+
+      const emailSettingsToUpdate: any = {}
+      if (emailSubject !== undefined) emailSettingsToUpdate.emailSubject = emailSubject
+      if (emailBody !== undefined) emailSettingsToUpdate.emailBody = emailBody
+      if (emailFromName !== undefined) emailSettingsToUpdate.emailFromName = emailFromName
+      if (emailEnabled !== undefined) emailSettingsToUpdate.emailEnabled = emailEnabled
+      if (Object.keys(emailSettingsToUpdate).length > 0) {
+        updateEventEmailSettings(req.params.id, emailSettingsToUpdate)
       }
 
       // If settings changed, push settings-update command to booth
@@ -1407,8 +1417,198 @@ router.post('/share/create', async (req: Request, res: Response) => {
     res.status(500).json({ error: error.message })
   }
 })
+// --- Email Share Routes ---
+import {
+  createEmailSend, getEmailSendsBySession, updateEmailSendStatus, 
+  getGlobalEmailDefaults, updateGlobalEmailDefaults, updateEventEmailSettings
+} from '@snapsync/shared'
+import { isSmtpConfigured, getSmtpInfo, resolveEmailContent, renderTemplate, sendShareEmail, BUILT_IN_SUBJECT, BUILT_IN_BODY } from '../utils/email'
 
-export default router
+router.get('/settings/smtp-status', requireRole('admin'), (req: Request, res: Response) => {
+  res.json({
+    configured: isSmtpConfigured(),
+    ...getSmtpInfo()
+  })
+})
+
+router.post('/settings/smtp-test', requireRole('admin'), async (req: Request, res: Response) => {
+  try {
+    const userEmail = (req as any).user?.email
+    if (!userEmail) return res.status(400).json({ error: 'No admin email found' })
+    const result = await sendShareEmail({
+      to: userEmail,
+      subject: 'SnapSync SMTP Test',
+      body: 'This is a test email from SnapSync. SMTP is configured correctly.',
+      fromName: 'SnapSync Photo Booth'
+    })
+    res.json(result)
+  } catch (error: any) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
+router.get('/settings/email-defaults', requireRole('admin'), (req: Request, res: Response) => {
+  try {
+    res.json({
+      ...getGlobalEmailDefaults(),
+      builtInSubject: BUILT_IN_SUBJECT,
+      builtInBody: BUILT_IN_BODY
+    })
+  } catch (error: any) {
+    console.error("EMAIL DEFAULTS ERROR:", error);
+    res.status(500).json({ error: error.message, stack: error.stack })
+  }
+})
+
+router.patch('/settings/email-defaults', requireRole('admin'), (req: Request, res: Response) => {
+  try {
+    const { emailSubject, emailBody, emailFromName } = req.body
+    updateGlobalEmailDefaults({
+      emailSubject: emailSubject !== undefined ? emailSubject : null,
+      emailBody: emailBody !== undefined ? emailBody : null,
+      emailFromName: emailFromName !== undefined ? emailFromName : null
+    })
+    res.json({ success: true })
+  } catch (error: any) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
+router.get('/events/:eventId/sessions/:sessionId/emails', async (req: Request, res: Response) => {
+  try {
+    const emails = getEmailSendsBySession(req.params.sessionId)
+    
+    const baseUrl = process.env.VITE_SHARE_BASE_URL || (process.env.SHARE_BASE_URL ? `${process.env.SHARE_BASE_URL.replace(/\/$/, '')}/share` : `${req.protocol}://${req.get('host')}/share`);
+    
+    const mapped = emails.map(e => ({
+      id: e.id,
+      recipientEmail: e.recipient_email,
+      status: e.status,
+      errorCode: e.error_code,
+      errorMessage: e.error_message,
+      shareId: e.share_id,
+      shareUrl: `${baseUrl.replace(/\/$/, '')}/${e.share_id}`,
+      shareIsActive: e.share_is_active === 1,
+      sentAt: e.sent_at,
+      createdAt: e.created_at,
+      sentByName: e.sent_by_name
+    }))
+    
+    res.json(mapped)
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+router.post('/events/:eventId/sessions/:sessionId/email', async (req: Request, res: Response) => {
+  try {
+    const { recipientEmail } = req.body
+    const { eventId, sessionId } = req.params
+
+    if (!recipientEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipientEmail)) {
+      return res.status(400).json({ error: 'Invalid email address' })
+    }
+
+    const event = getEvent(eventId)
+    if (!event) return res.status(404).json({ error: 'Event not found' })
+    if (event.email_enabled === 0) return res.status(404).json({ error: 'Email is disabled for this event' })
+
+    if (!isSmtpConfigured()) {
+      return res.status(503).json({ error: 'smtp_not_configured', message: 'Email is not configured on this server.' })
+    }
+
+    const emails = getEmailSendsBySession(sessionId)
+    if (emails.length >= 20) {
+      return res.status(429).json({ error: 'Too many emails for this session' })
+    }
+
+    let shareId: string | null = null
+    const existingFailed = emails.find(e => e.recipient_email === recipientEmail && e.status === 'failed')
+    if (existingFailed) {
+      shareId = existingFailed.share_id
+    } else {
+      const shares = getSessionShares(sessionId)
+      const primaryShare = shares.find(s => s.is_active === 1)
+      if (primaryShare) {
+        shareId = primaryShare.id
+      } else {
+        shareId = createSessionShare(sessionId)
+      }
+    }
+
+    const sentByName = (req as any).user?.name || (req as any).user?.email || 'Operator'
+
+    const emailSendId = createEmailSend({
+      sessionId,
+      eventId,
+      shareId: shareId!,
+      recipientEmail,
+      sentByName
+    })
+
+    const globalDefaults = getGlobalEmailDefaults()
+    const template = resolveEmailContent(event, globalDefaults)
+
+    const baseUrl = process.env.VITE_SHARE_BASE_URL || (process.env.SHARE_BASE_URL ? `${process.env.SHARE_BASE_URL.replace(/\/$/, '')}/share` : `${req.protocol}://${req.get('host')}/share`);
+    const shareUrl = `${baseUrl.replace(/\/$/, '')}/${shareId}`
+
+    const eventDateObj = new Date(event.created_at || Date.now())
+    const eventDate = eventDateObj.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })
+    const eventTime = eventDateObj.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+
+    const renderedBody = renderTemplate(template.body, {
+      shareUrl,
+      eventName: event.name,
+      photoCount: event.photo_count,
+      organizer: event.organizer || '',
+      contactInfo: event.contact_info || '',
+      eventDate,
+      eventTime,
+      shareTitle: ''
+    })
+
+    const renderedSubject = renderTemplate(template.subject, {
+      eventName: event.name,
+      photoCount: event.photo_count,
+      organizer: event.organizer || '',
+      eventDate,
+      eventTime
+    })
+
+    const result = await sendShareEmail({
+      to: recipientEmail,
+      subject: renderedSubject,
+      body: renderedBody,
+      fromName: template.fromName
+    })
+
+    updateEmailSendStatus(emailSendId, result.success ? 'sent' : 'failed', {
+      errorCode: result.errorCode,
+      errorMessage: result.errorMessage,
+      sentAt: result.sentAt
+    })
+
+    const finalRecord = getEmailSendsBySession(sessionId).find(e => e.id === emailSendId)
+    const mappedRecord = {
+      id: finalRecord!.id,
+      recipientEmail: finalRecord!.recipient_email,
+      status: finalRecord!.status,
+      errorCode: finalRecord!.error_code,
+      errorMessage: finalRecord!.error_message,
+      shareId: finalRecord!.share_id,
+      shareUrl: shareUrl,
+      shareIsActive: finalRecord!.share_is_active === 1,
+      sentAt: finalRecord!.sent_at,
+      createdAt: finalRecord!.created_at,
+      sentByName: finalRecord!.sent_by_name
+    }
+
+    res.json({ success: result.success, emailSend: mappedRecord })
+  } catch (err: any) {
+    logger.error('Error in email route', err)
+    res.status(500).json({ error: err.message })
+  }
+})
 
 // --- Motivational Messages Routes (Accessible to operators) ---
 import { getGlobalMessages, updateGlobalMessages } from '@snapsync/shared'
@@ -1442,3 +1642,6 @@ router.patch('/global-messages', async (req: Request, res: Response) => {
     res.status(500).json({ error: error.message })
   }
 })
+
+export default router
+

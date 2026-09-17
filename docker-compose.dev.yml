@@ -8,6 +8,8 @@ services:
     ports:
       - "3000:3000"
       - "5173:5173"
+    env_file:
+      - .env
     environment:
       NODE_ENV: development
       PORT: 3000
@@ -38,6 +40,8 @@ services:
     command: sh -c "cd /shared && npm install && cd /app && npm install && npx concurrently \"npm run dev\" \"npm run dev:frontend\""
     ports:
       - "3001:3001"
+    env_file:
+      - .env
     environment:
       NODE_ENV: development
       PORT: 3001

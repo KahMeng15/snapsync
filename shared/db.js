@@ -46,6 +46,7 @@ exports.getAllUsers = getAllUsers;
 exports.deleteUser = deleteUser;
 exports.countUsers = countUsers;
 exports.updateUser = updateUser;
+exports.clearSuperAdmins = clearSuperAdmins;
 exports.setEventShareOriginals = setEventShareOriginals;
 exports.getOrCreateEventShareToken = getOrCreateEventShareToken;
 exports.getEventIdByShareToken = getEventIdByShareToken;
@@ -55,6 +56,13 @@ exports.getGlobalMessages = getGlobalMessages;
 exports.updateGlobalMessages = updateGlobalMessages;
 exports.updateEventMessages = updateEventMessages;
 exports.updateSessionShareTitle = updateSessionShareTitle;
+exports.createEmailSend = createEmailSend;
+exports.getEmailSendsBySession = getEmailSendsBySession;
+exports.updateEmailSendStatus = updateEmailSendStatus;
+exports.getGlobalEmailDefaults = getGlobalEmailDefaults;
+exports.updateGlobalEmailDefaults = updateGlobalEmailDefaults;
+exports.updateEventEmailSettings = updateEventEmailSettings;
+exports.resolveEmailTemplate = resolveEmailTemplate;
 const better_sqlite3_1 = __importDefault(require("better-sqlite3"));
 const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
@@ -357,6 +365,13 @@ catch (e) {
         throw e;
 } // in minutes
 try {
+    db.exec(`ALTER TABLE global_settings ADD COLUMN remote_preview_max_viewers INTEGER NOT NULL DEFAULT 3`);
+}
+catch (e) {
+    if (!e.message.includes("duplicate column name"))
+        throw e;
+}
+try {
     db.exec(`ALTER TABLE camera_settings ADD COLUMN dslr_whitebalance_kelvin INTEGER NOT NULL DEFAULT 5200`);
 }
 catch (e) {
@@ -594,6 +609,53 @@ catch (e) {
     logger_1.logger.error('Migration failed for session_shares', e);
 }
 db.exec(`
+  CREATE TABLE IF NOT EXISTS email_sends (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL REFERENCES photo_sessions(id) ON DELETE CASCADE,
+    event_id TEXT NOT NULL,
+    share_id TEXT NOT NULL REFERENCES session_shares(id) ON DELETE CASCADE,
+    recipient_email TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','sent','failed')),
+    error_code TEXT,
+    error_message TEXT,
+    sent_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    sent_by_name TEXT
+  )
+`);
+db.exec(`
+  CREATE INDEX IF NOT EXISTS idx_email_sends_session
+    ON email_sends(session_id)
+`);
+try {
+    db.exec(`ALTER TABLE global_settings ADD COLUMN email_subject_default TEXT`);
+}
+catch { }
+try {
+    db.exec(`ALTER TABLE global_settings ADD COLUMN email_body_default TEXT`);
+}
+catch { }
+try {
+    db.exec(`ALTER TABLE global_settings ADD COLUMN email_from_name TEXT`);
+}
+catch { }
+try {
+    db.exec(`ALTER TABLE events ADD COLUMN email_subject TEXT`);
+}
+catch { }
+try {
+    db.exec(`ALTER TABLE events ADD COLUMN email_body TEXT`);
+}
+catch { }
+try {
+    db.exec(`ALTER TABLE events ADD COLUMN email_from_name TEXT`);
+}
+catch { }
+try {
+    db.exec(`ALTER TABLE events ADD COLUMN email_enabled INTEGER NOT NULL DEFAULT 1`);
+}
+catch { }
+db.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
     email TEXT NOT NULL UNIQUE,
@@ -611,6 +673,13 @@ catch (e) {
 }
 try {
     db.exec(`ALTER TABLE users ADD COLUMN is_disabled INTEGER NOT NULL DEFAULT 0`);
+}
+catch (e) {
+    if (!e.message.includes("duplicate column name"))
+        throw e;
+}
+try {
+    db.exec(`ALTER TABLE users ADD COLUMN is_superadmin INTEGER NOT NULL DEFAULT 0`);
 }
 catch (e) {
     if (!e.message.includes("duplicate column name"))
@@ -832,8 +901,8 @@ function restoreSession(sessionId) {
 }
 const getDefaultsStmt = db.prepare('SELECT * FROM global_settings WHERE id = 1');
 const upsertDefaultsStmt = db.prepare(`
-  INSERT INTO global_settings (id, photo_count, countdown, capture_interval, post_capture_preview, dslr_iso, dslr_shutterspeed, dslr_aperture, dslr_focus_mode, dslr_whitebalance, dslr_whitebalance_kelvin, organizer, contact_info, api_rate_limit_admin, api_rate_limit_share, bw_limit_admin, bw_limit_share, lockout_duration)
-  VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  INSERT INTO global_settings (id, photo_count, countdown, capture_interval, post_capture_preview, dslr_iso, dslr_shutterspeed, dslr_aperture, dslr_focus_mode, dslr_whitebalance, dslr_whitebalance_kelvin, organizer, contact_info, api_rate_limit_admin, api_rate_limit_share, bw_limit_admin, bw_limit_share, lockout_duration, remote_preview_max_viewers)
+  VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   ON CONFLICT(id) DO UPDATE SET
     photo_count = excluded.photo_count,
     countdown = excluded.countdown,
@@ -851,7 +920,8 @@ const upsertDefaultsStmt = db.prepare(`
     api_rate_limit_share = excluded.api_rate_limit_share,
     bw_limit_admin = excluded.bw_limit_admin,
     bw_limit_share = excluded.bw_limit_share,
-    lockout_duration = excluded.lockout_duration
+    lockout_duration = excluded.lockout_duration,
+    remote_preview_max_viewers = excluded.remote_preview_max_viewers
 `);
 function getGlobalSettings() {
     const row = getDefaultsStmt.get();
@@ -873,10 +943,14 @@ function getGlobalSettings() {
         bwLimitAdmin: row?.bw_limit_admin ?? 1000,
         bwLimitShare: row?.bw_limit_share ?? 100,
         lockoutDuration: row?.lockout_duration ?? 5,
+        remotePreviewMaxViewers: row?.remote_preview_max_viewers ?? 3,
+        emailSubjectDefault: row?.email_subject_default ?? null,
+        emailBodyDefault: row?.email_body_default ?? null,
+        emailFromName: row?.email_from_name ?? null,
     };
 }
 function updateGlobalSettings(settings) {
-    upsertDefaultsStmt.run(settings.photoCount, settings.countdown, settings.captureInterval, settings.postCapturePreview, settings.dslrIso, settings.dslrShutterSpeed, settings.dslrAperture, settings.dslrFocusMode ?? 'auto', settings.dslrWhiteBalance ?? 'auto', settings.dslrWhiteBalanceKelvin ?? 5200, settings.organizer ?? '', settings.contactInfo ?? '', settings.apiRateLimitAdmin ?? 500, settings.apiRateLimitShare ?? 300, settings.bwLimitAdmin ?? 1000, settings.bwLimitShare ?? 100, settings.lockoutDuration ?? 5);
+    upsertDefaultsStmt.run(settings.photoCount, settings.countdown, settings.captureInterval, settings.postCapturePreview, settings.dslrIso, settings.dslrShutterSpeed, settings.dslrAperture, settings.dslrFocusMode ?? 'auto', settings.dslrWhiteBalance ?? 'auto', settings.dslrWhiteBalanceKelvin ?? 5200, settings.organizer ?? '', settings.contactInfo ?? '', settings.apiRateLimitAdmin ?? 500, settings.apiRateLimitShare ?? 300, settings.bwLimitAdmin ?? 1000, settings.bwLimitShare ?? 100, settings.lockoutDuration ?? 5, settings.remotePreviewMaxViewers ?? 3);
     logger_1.logger.info('Global defaults updated', settings);
 }
 const getCameraSettingsStmt = db.prepare('SELECT * FROM camera_settings WHERE model = ?');
@@ -967,18 +1041,18 @@ function getEventAnalytics(eventId) {
 }
 const findUserByEmailStmt = db.prepare('SELECT * FROM users WHERE email = ?');
 const findUserByIdStmt = db.prepare('SELECT * FROM users WHERE id = ?');
-const insertUserStmt = db.prepare('INSERT INTO users (id, email, password_hash, role, name, is_disabled) VALUES (?, ?, ?, ?, ?, ?)');
-const getAllUsersStmt = db.prepare('SELECT id, email, role, name, is_disabled, created_at FROM users');
+const insertUserStmt = db.prepare('INSERT INTO users (id, email, password_hash, role, name, is_disabled, is_superadmin) VALUES (?, ?, ?, ?, ?, ?, ?)');
+const getAllUsersStmt = db.prepare('SELECT id, email, role, name, is_disabled, is_superadmin, created_at FROM users');
 const deleteUserStmt = db.prepare('DELETE FROM users WHERE id = ?');
-const updateUserStmt = db.prepare('UPDATE users SET name = ?, email = ?, password_hash = ?, role = ?, is_disabled = ? WHERE id = ?');
+const updateUserStmt = db.prepare('UPDATE users SET name = ?, email = ?, password_hash = ?, role = ?, is_disabled = ?, is_superadmin = ? WHERE id = ?');
 function findUserByEmail(email) {
     return findUserByEmailStmt.get(email);
 }
 function findUserById(id) {
     return findUserByIdStmt.get(id);
 }
-function insertUser(id, email, passwordHash, role, name = '', isDisabled = 0) {
-    insertUserStmt.run(id, email, passwordHash, role, name, isDisabled);
+function insertUser(id, email, passwordHash, role, name = '', isDisabled = 0, isSuperAdmin = 0) {
+    insertUserStmt.run(id, email, passwordHash, role, name, isDisabled, isSuperAdmin);
 }
 function getAllUsers() {
     return getAllUsersStmt.all();
@@ -989,8 +1063,11 @@ function deleteUser(id) {
 function countUsers() {
     return db.prepare('SELECT COUNT(*) as count FROM users').get().count;
 }
-function updateUser(id, name, email, passwordHash, role, isDisabled) {
-    updateUserStmt.run(name, email, passwordHash, role, isDisabled, id);
+function updateUser(id, name, email, passwordHash, role, isDisabled, isSuperAdmin) {
+    updateUserStmt.run(name, email, passwordHash, role, isDisabled, isSuperAdmin, id);
+}
+function clearSuperAdmins() {
+    db.prepare('UPDATE users SET is_superadmin = 0').run();
 }
 function setEventShareOriginals(id, value) {
     try {
@@ -1076,4 +1153,90 @@ function updateEventMessages(eventId, msgs) {
 }
 function updateSessionShareTitle(sessionId, shareTitle) {
     db.prepare('UPDATE photo_sessions SET share_title = ? WHERE id = ?').run(shareTitle, sessionId);
+}
+// --- Email Functions ---
+const insertEmailSendStmt = db.prepare(`
+  INSERT INTO email_sends (id, session_id, event_id, share_id, recipient_email, sent_by_name)
+  VALUES (?, ?, ?, ?, ?, ?)
+`);
+function createEmailSend(data) {
+    const id = require('crypto').randomBytes(8).toString('hex');
+    insertEmailSendStmt.run(id, data.sessionId, data.eventId, data.shareId, data.recipientEmail, data.sentByName ?? null);
+    return id;
+}
+function getEmailSendsBySession(sessionId) {
+    return db.prepare(`
+    SELECT es.*, ss.is_active as share_is_active 
+    FROM email_sends es
+    LEFT JOIN session_shares ss ON ss.id = es.share_id
+    WHERE es.session_id = ?
+    ORDER BY es.created_at DESC
+  `).all(sessionId);
+}
+function updateEmailSendStatus(id, status, opts) {
+    const fields = ['status = ?'];
+    const values = [status];
+    if (opts?.errorCode !== undefined) {
+        fields.push('error_code = ?');
+        values.push(opts.errorCode);
+    }
+    if (opts?.errorMessage !== undefined) {
+        fields.push('error_message = ?');
+        values.push(opts.errorMessage);
+    }
+    if (opts?.sentAt !== undefined) {
+        fields.push('sent_at = ?');
+        values.push(opts.sentAt);
+    }
+    values.push(id);
+    db.prepare(`UPDATE email_sends SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+}
+function getGlobalEmailDefaults() {
+    const row = db.prepare('SELECT email_subject_default, email_body_default, email_from_name FROM global_settings WHERE id = 1').get();
+    return {
+        emailSubject: row?.email_subject_default ?? null,
+        emailBody: row?.email_body_default ?? null,
+        emailFromName: row?.email_from_name ?? null
+    };
+}
+function updateGlobalEmailDefaults(data) {
+    db.prepare(`
+    UPDATE global_settings SET 
+      email_subject_default = ?, 
+      email_body_default = ?, 
+      email_from_name = ?
+    WHERE id = 1
+  `).run(data.emailSubject, data.emailBody, data.emailFromName);
+}
+function updateEventEmailSettings(eventId, data) {
+    const fields = [];
+    const values = [];
+    if (data.emailSubject !== undefined) {
+        fields.push('email_subject = ?');
+        values.push(data.emailSubject);
+    }
+    if (data.emailBody !== undefined) {
+        fields.push('email_body = ?');
+        values.push(data.emailBody);
+    }
+    if (data.emailFromName !== undefined) {
+        fields.push('email_from_name = ?');
+        values.push(data.emailFromName);
+    }
+    if (data.emailEnabled !== undefined) {
+        fields.push('email_enabled = ?');
+        values.push(data.emailEnabled);
+    }
+    if (fields.length > 0) {
+        values.push(eventId);
+        db.prepare(`UPDATE events SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+    }
+}
+function resolveEmailTemplate(event, globals, field) {
+    const globalField = field === 'email_subject' ? 'emailSubjectDefault' : (field === 'email_body' ? 'emailBodyDefault' : 'emailFromName');
+    if (event?.[field] && event[field].trim() !== '')
+        return event[field];
+    if (globals?.[globalField] && globals[globalField].trim() !== '')
+        return globals[globalField];
+    return null;
 }

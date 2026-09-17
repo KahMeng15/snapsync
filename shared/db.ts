@@ -250,6 +250,36 @@ try {
 }
 
 db.exec(`
+  CREATE TABLE IF NOT EXISTS email_sends (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL REFERENCES photo_sessions(id) ON DELETE CASCADE,
+    event_id TEXT NOT NULL,
+    share_id TEXT NOT NULL REFERENCES session_shares(id) ON DELETE CASCADE,
+    recipient_email TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','sent','failed')),
+    error_code TEXT,
+    error_message TEXT,
+    sent_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    sent_by_name TEXT
+  )
+`)
+
+db.exec(`
+  CREATE INDEX IF NOT EXISTS idx_email_sends_session
+    ON email_sends(session_id)
+`)
+
+try { db.exec(`ALTER TABLE global_settings ADD COLUMN email_subject_default TEXT`) } catch {}
+try { db.exec(`ALTER TABLE global_settings ADD COLUMN email_body_default TEXT`) } catch {}
+try { db.exec(`ALTER TABLE global_settings ADD COLUMN email_from_name TEXT`) } catch {}
+
+try { db.exec(`ALTER TABLE events ADD COLUMN email_subject TEXT`) } catch {}
+try { db.exec(`ALTER TABLE events ADD COLUMN email_body TEXT`) } catch {}
+try { db.exec(`ALTER TABLE events ADD COLUMN email_from_name TEXT`) } catch {}
+try { db.exec(`ALTER TABLE events ADD COLUMN email_enabled INTEGER NOT NULL DEFAULT 1`) } catch {}
+
+db.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
     email TEXT NOT NULL UNIQUE,
@@ -420,6 +450,7 @@ export function getEvent(id: string) {
     dslr_iso: string; dslr_shutterspeed: string; dslr_aperture: string;
     dslr_focus_mode: string; dslr_whitebalance: string; dslr_whitebalance_kelvin: number;
     obfuscate_links: number; expiry_type: string; expiry_value: string; organizer: string; contact_info: string;
+    email_subject: string | null; email_body: string | null; email_from_name: string | null; email_enabled: number;
     operator_password?: string; created_at: string
   } | undefined
 }
@@ -432,6 +463,7 @@ export function getEventByOtp(otp: string) {
     dslr_iso: string; dslr_shutterspeed: string; dslr_aperture: string;
     dslr_focus_mode: string; dslr_whitebalance: string; dslr_whitebalance_kelvin: number;
     obfuscate_links: number; expiry_type: string; expiry_value: string; organizer: string; contact_info: string;
+    email_subject: string | null; email_body: string | null; email_from_name: string | null; email_enabled: number;
     created_at: string; share_originals: number
   } | undefined
 }
@@ -445,6 +477,7 @@ export function listEvents(includeEnded = false) {
     dslr_iso: string; dslr_shutterspeed: string; dslr_aperture: string;
     dslr_focus_mode: string; dslr_whitebalance: string; dslr_whitebalance_kelvin: number;
     obfuscate_links: number; expiry_type: string; expiry_value: string; organizer: string; contact_info: string;
+    email_subject: string | null; email_body: string | null; email_from_name: string | null; email_enabled: number;
     created_at: string; share_originals: number
   }>
 }
@@ -607,6 +640,9 @@ export function getGlobalSettings() {
     bwLimitShare: row?.bw_limit_share ?? 100,
     lockoutDuration: row?.lockout_duration ?? 5,
     remotePreviewMaxViewers: row?.remote_preview_max_viewers ?? 3,
+    emailSubjectDefault: row?.email_subject_default ?? null,
+    emailBodyDefault: row?.email_body_default ?? null,
+    emailFromName: row?.email_from_name ?? null,
   }
 }
 
@@ -858,4 +894,115 @@ export function updateEventMessages(eventId: string, msgs: { msgHomepage: string
 
 export function updateSessionShareTitle(sessionId: string, shareTitle: string) {
   db.prepare('UPDATE photo_sessions SET share_title = ? WHERE id = ?').run(shareTitle, sessionId);
+}
+
+// --- Email Functions ---
+
+const insertEmailSendStmt = db.prepare(`
+  INSERT INTO email_sends (id, session_id, event_id, share_id, recipient_email, sent_by_name)
+  VALUES (?, ?, ?, ?, ?, ?)
+`)
+
+export function createEmailSend(data: {
+  sessionId: string
+  eventId: string
+  shareId: string
+  recipientEmail: string
+  sentByName?: string
+}): string {
+  const id = require('crypto').randomBytes(8).toString('hex')
+  insertEmailSendStmt.run(id, data.sessionId, data.eventId, data.shareId, data.recipientEmail, data.sentByName ?? null)
+  return id
+}
+
+export function getEmailSendsBySession(sessionId: string) {
+  return db.prepare(`
+    SELECT es.*, ss.is_active as share_is_active 
+    FROM email_sends es
+    LEFT JOIN session_shares ss ON ss.id = es.share_id
+    WHERE es.session_id = ?
+    ORDER BY es.created_at DESC
+  `).all(sessionId) as Array<{
+    id: string
+    session_id: string
+    event_id: string
+    share_id: string
+    recipient_email: string
+    status: 'pending' | 'sent' | 'failed'
+    error_code: string | null
+    error_message: string | null
+    sent_at: string | null
+    created_at: string
+    sent_by_name: string | null
+    share_is_active: number
+  }>
+}
+
+export function updateEmailSendStatus(
+  id: string,
+  status: 'sent' | 'failed',
+  opts?: { errorCode?: string; errorMessage?: string; sentAt?: string }
+) {
+  const fields = ['status = ?']
+  const values: any[] = [status]
+  
+  if (opts?.errorCode !== undefined) { fields.push('error_code = ?'); values.push(opts.errorCode) }
+  if (opts?.errorMessage !== undefined) { fields.push('error_message = ?'); values.push(opts.errorMessage) }
+  if (opts?.sentAt !== undefined) { fields.push('sent_at = ?'); values.push(opts.sentAt) }
+  
+  values.push(id)
+  db.prepare(`UPDATE email_sends SET ${fields.join(', ')} WHERE id = ?`).run(...values)
+}
+
+export function getGlobalEmailDefaults() {
+  const row = db.prepare('SELECT email_subject_default, email_body_default, email_from_name FROM global_settings WHERE id = 1').get() as any
+  return {
+    emailSubject: row?.email_subject_default ?? null,
+    emailBody: row?.email_body_default ?? null,
+    emailFromName: row?.email_from_name ?? null
+  }
+}
+
+export function updateGlobalEmailDefaults(data: {
+  emailSubject: string | null
+  emailBody: string | null
+  emailFromName: string | null
+}) {
+  db.prepare(`
+    UPDATE global_settings SET 
+      email_subject_default = ?, 
+      email_body_default = ?, 
+      email_from_name = ?
+    WHERE id = 1
+  `).run(data.emailSubject, data.emailBody, data.emailFromName)
+}
+
+export function updateEventEmailSettings(eventId: string, data: {
+  emailSubject?: string | null
+  emailBody?: string | null
+  emailFromName?: string | null
+  emailEnabled?: number
+}) {
+  const fields = []
+  const values = []
+  if (data.emailSubject !== undefined) { fields.push('email_subject = ?'); values.push(data.emailSubject) }
+  if (data.emailBody !== undefined) { fields.push('email_body = ?'); values.push(data.emailBody) }
+  if (data.emailFromName !== undefined) { fields.push('email_from_name = ?'); values.push(data.emailFromName) }
+  if (data.emailEnabled !== undefined) { fields.push('email_enabled = ?'); values.push(data.emailEnabled) }
+  
+  if (fields.length > 0) {
+    values.push(eventId)
+    db.prepare(`UPDATE events SET ${fields.join(', ')} WHERE id = ?`).run(...values)
+  }
+}
+
+export function resolveEmailTemplate(
+  event: any,
+  globals: any,
+  field: 'email_subject' | 'email_body' | 'email_from_name'
+): string | null {
+  const globalField = field === 'email_subject' ? 'emailSubjectDefault' : (field === 'email_body' ? 'emailBodyDefault' : 'emailFromName')
+  if (event?.[field] && event[field].trim() !== '') return event[field]
+  if (globals?.[globalField] && globals[globalField].trim() !== '') return globals[globalField]
+  return null
 }

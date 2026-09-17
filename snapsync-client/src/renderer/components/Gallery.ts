@@ -89,8 +89,9 @@ export class Gallery {
   private listPage: HTMLDivElement
   private listGrid: HTMLDivElement
 
-  // Page 2: session detail
   private detailPage: HTMLDivElement
+
+  public emailEnabled: boolean = true
 
   constructor(container: HTMLElement) {
     this.container = container
@@ -502,6 +503,16 @@ export class Gallery {
         scanRow.className = 'g-qr-scan-row'
         scanRow.textContent = shareUrl
         qrBox.appendChild(scanRow)
+
+        if (this.emailEnabled) {
+          const emailBtn = createButton('Email Photos', { variant: 'secondary', onClick: () => {
+            this.showEmailModal(session.sessionId)
+          }})
+          emailBtn.style.width = '100%'
+          emailBtn.style.marginTop = '1rem'
+          qrBox.appendChild(emailBtn)
+        }
+
       } catch (e) {
         console.error('[Gallery] QR error', e)
         const errRow = document.createElement('div')
@@ -785,5 +796,124 @@ export class Gallery {
 
     update()
     document.body.appendChild(lb)
+  }
+
+  private async showEmailModal(sessionId: string) {
+    const modalBg = document.createElement('div')
+    modalBg.className = 'g-modal-bg'
+    Object.assign(modalBg.style, {
+      position: 'fixed', inset: '0', background: 'rgba(0,0,0,0.8)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      zIndex: '10000'
+    })
+
+    const modalBox = document.createElement('div')
+    Object.assign(modalBox.style, {
+      background: 'var(--color-bg)', padding: '2rem', borderRadius: '12px',
+      width: '90%', maxWidth: '400px', display: 'flex', flexDirection: 'column', gap: '1rem',
+      boxShadow: '0 10px 25px rgba(0,0,0,0.5)'
+    })
+
+    const title = document.createElement('h3')
+    title.textContent = 'Email Photos'
+    title.style.margin = '0'
+    title.style.fontSize = '1.25rem'
+
+    const desc = document.createElement('p')
+    desc.textContent = 'Enter your email address to receive a link to your photos.'
+    desc.style.color = 'var(--color-text-sub)'
+    desc.style.fontSize = '0.9rem'
+    desc.style.margin = '0'
+
+    const input = document.createElement('input')
+    input.type = 'email'
+    input.placeholder = 'your@email.com'
+    Object.assign(input.style, {
+      padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--color-border)',
+      background: 'var(--color-surface)', color: 'var(--color-text)', fontSize: '1rem'
+    })
+
+    const errorMsg = document.createElement('p')
+    errorMsg.style.color = 'var(--color-error)'
+    errorMsg.style.fontSize = '0.85rem'
+    errorMsg.style.margin = '0'
+    errorMsg.style.display = 'none'
+
+    const btnGroup = document.createElement('div')
+    Object.assign(btnGroup.style, { display: 'flex', gap: '1rem', marginTop: '1rem' })
+
+    const cancelBtn = createButton('Cancel', { variant: 'secondary' })
+    cancelBtn.style.flex = '1'
+    cancelBtn.addEventListener('click', () => modalBg.remove())
+
+    const sendBtn = createButton('Send', { variant: 'primary' })
+    sendBtn.style.flex = '1'
+
+    btnGroup.appendChild(cancelBtn)
+    btnGroup.appendChild(sendBtn)
+
+    modalBox.appendChild(title)
+    modalBox.appendChild(desc)
+    modalBox.appendChild(input)
+    modalBox.appendChild(errorMsg)
+    modalBox.appendChild(btnGroup)
+    modalBg.appendChild(modalBox)
+    document.body.appendChild(modalBg)
+
+    input.focus()
+
+    const submit = async () => {
+      const email = input.value.trim()
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        errorMsg.textContent = 'Please enter a valid email address.'
+        errorMsg.style.display = 'block'
+        return
+      }
+
+      errorMsg.style.display = 'none'
+      sendBtn.textContent = 'Sending...'
+      sendBtn.disabled = true
+      cancelBtn.disabled = true
+
+      try {
+        const settings = await window.snapsync.getSettings()
+        if (!settings.serverUrl) throw new Error('Not connected to server')
+
+        const sUrl = normalizeUrl(settings.serverUrl)
+        const res = await fetch(`${sUrl}/api/booth/email-session`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-booth-otp': settings.otp || ''
+          },
+          body: JSON.stringify({ sessionId, recipientEmail: email })
+        })
+
+        const data = await res.json()
+        if (!res.ok || !data.success) {
+          throw new Error(data.errorMessage || data.error || 'Failed to send email')
+        }
+
+        modalBox.innerHTML = `
+          <h3 style="margin:0; font-size:1.25rem; color:var(--color-success)">Email Sent!</h3>
+          <p style="color:var(--color-text-sub); font-size:0.9rem;">Your photos have been sent to ${email}</p>
+        `
+        const okBtn = createButton('Done', { variant: 'primary', onClick: () => modalBg.remove() })
+        okBtn.style.marginTop = '1rem'
+        modalBox.appendChild(okBtn)
+      } catch (err: any) {
+        errorMsg.textContent = err.message || 'An error occurred. Please try again.'
+        errorMsg.style.display = 'block'
+        sendBtn.textContent = 'Send'
+        sendBtn.disabled = false
+        cancelBtn.disabled = false
+      }
+    }
+
+    sendBtn.addEventListener('click', submit)
+    input.addEventListener('keyup', (e) => {
+      if (e.key === 'Enter') submit()
+      if (e.key === 'Escape') modalBg.remove()
+    })
   }
 }
