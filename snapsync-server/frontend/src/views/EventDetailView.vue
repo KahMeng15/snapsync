@@ -541,7 +541,7 @@ function formatTime(ts: string) {
   width: 100%;
 }
 .remote-sidebar {
-  display: none;
+  display: none !important;
 }
 @media (min-width: 1200px) {
   .dashboard-grid-full {
@@ -550,7 +550,7 @@ function formatTime(ts: string) {
     align-items: flex-start;
   }
   .remote-sidebar {
-    display: flex;
+    display: flex !important;
     flex-direction: column;
     position: sticky;
     top: 5rem;
@@ -973,7 +973,7 @@ function formatTime(ts: string) {
   width: 100%;
 }
 .remote-sidebar {
-  display: none;
+  display: none !important;
 }
 @media (min-width: 1200px) {
   .dashboard-grid-full {
@@ -982,7 +982,7 @@ function formatTime(ts: string) {
     align-items: flex-start;
   }
   .remote-sidebar {
-    display: flex;
+    display: flex !important;
     flex-direction: column;
     position: sticky;
     top: 5rem;
