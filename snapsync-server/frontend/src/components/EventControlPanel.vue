@@ -184,14 +184,16 @@
   </aside>
 
   <!-- Local QR Modal -->
-  <div v-if="showRemoteQR" class="app-modal-overlay" @click="showRemoteQR = false" style="z-index: 10000; cursor: pointer;">
-    <div class="app-modal" style="background: white; padding: 2rem; border-radius: 1rem; text-align: center; max-width: 90vw; width: 400px; color: black;" @click.stop>
-      <h2 style="margin-bottom: 1rem; margin-top: 0;">Scan to Get Photos</h2>
-      <img v-if="remoteQrDataUrl" :src="remoteQrDataUrl" style="width: 100%; height: auto; max-width: 300px; margin: 0 auto; display: block;" />
-      <div v-else style="padding: 4rem; color: #666;">Generating QR...</div>
-      <button class="app-btn btn-primary" style="margin-top: 2rem; width: 100%; padding: 1rem;" @click="showRemoteQR = false">Close</button>
+  <Teleport to="body">
+    <div v-if="showRemoteQR" class="app-modal-overlay" @click="showRemoteQR = false" style="z-index: 10000; cursor: pointer;">
+      <div class="app-modal" style="background: white; padding: 2rem; border-radius: 1rem; text-align: center; max-width: 90vw; width: 400px; color: black;" @click.stop>
+        <h2 style="margin-bottom: 1rem; margin-top: 0;">Scan to Get Photos</h2>
+        <img v-if="remoteQrDataUrl" :src="remoteQrDataUrl" style="width: 100%; height: auto; max-width: 300px; margin: 0 auto; display: block;" />
+        <div v-else style="padding: 4rem; color: #666;">Generating QR...</div>
+        <button class="app-btn btn-primary" style="margin-top: 2rem; width: 100%; padding: 1rem;" @click="showRemoteQR = false">Close</button>
+      </div>
     </div>
-  </div>
+  </Teleport>
 </template>
 
 <script setup lang="ts">
@@ -206,9 +208,12 @@ const props = defineProps<{
   uploadQueue?: any
   sendMessage: (event: string, data: any) => void
   ws: any // to attach preview-chunk listener
+  show?: boolean
+  totalSessions?: number
+  totalPhotos?: number
 }>()
 
-const emit = defineEmits<{ retry: [] }>()
+const emit = defineEmits<{ retry: [], close: [] }>()
 
 const currentState = computed(() => props.boothState?.state || 'idle')
 

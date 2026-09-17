@@ -21,6 +21,7 @@ services:
       COOKIE_SAME_SITE: lax
       COOKIE_SECURE: "false"
       COOKIE_PATH: /
+      COOKIE_DOMAIN: ""
       VITE_BASE_URL: /
       SHARE_BASE_URL: ${SHARE_BASE_URL:-https://kmeng.ftp.sh/snapsync}
       VITE_SHARE_BASE_URL: ${VITE_SHARE_BASE_URL:-http://localhost:3001/snapsync/share}
@@ -48,6 +49,7 @@ services:
       SHARE_BASE_URL: http://localhost:3001/snapsync
       ADMIN_INTERNAL_URL: http://snapsync-server-dev:3000
       INTERNAL_API_SECRET: dev-internal-secret
+      COOKIE_DOMAIN: ""
       STORAGE_ROOT: /app
     volumes:
       - ./snapsync-share:/app
