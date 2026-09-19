@@ -182,4 +182,7 @@ contextBridge.exposeInMainWorld('snapsync', {
   closeApp: () => ipcRenderer.invoke('close-app'),
 
   getLogs: () => ipcRenderer.invoke('get-logs'),
+  openLogFolder: () => ipcRenderer.invoke('open-log-folder'),
+  clearLogs: () => ipcRenderer.invoke('clear-logs'),
+  logRenderer: (level: string, message: string) => ipcRenderer.invoke('log-renderer', { level, message }),
 })

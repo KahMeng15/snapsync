@@ -239,6 +239,16 @@ export class Settings {
     })
     header.appendChild(saveBtn)
 
+    const logsBtn = document.createElement('button')
+    logsBtn.textContent = 'App Logs'
+    logsBtn.style.cssText = `
+      padding: 0.5rem 1rem;
+      background: transparent; color: #aaa; border: 1px solid #333; border-radius: 8px;
+      font-size: 0.8125rem; font-weight: 500; cursor: pointer; margin-right: 0.5rem;
+    `
+    logsBtn.addEventListener('click', () => this.showLogs())
+    header.insertBefore(logsBtn, saveBtn)
+
     const devBtn = document.createElement('button')
     devBtn.textContent = 'Advanced Dev Options'
     devBtn.style.cssText = `
@@ -1707,35 +1717,106 @@ export class Settings {
 
   private logModal: HTMLDivElement | null = null
 
-  private async showLogs() {
+  public async showLogs() {
     if (!this.logModal) {
       this.logModal = document.createElement('div')
       this.logModal.style.cssText = `
-        position: fixed; inset: 0; z-index: 100;
-        display: flex; align-items: center; justify-content: center;
-        background: rgba(0,0,0,0.7); backdrop-filter: blur(4px);
+        position: fixed; inset: 0; z-index: 200;
+        display: none; align-items: center; justify-content: center;
+        background: rgba(0,0,0,0.85); backdrop-filter: blur(6px);
       `
       this.logModal.addEventListener('click', (e) => {
         if (e.target === this.logModal) this.logModal!.style.display = 'none'
       })
       document.body.appendChild(this.logModal)
     }
+
     const result = await window.snapsync?.getLogs()
-    const lines = result?.lines || []
-    const content = lines.join('\n')
+    let lines = result?.lines || []
+    const logFilePath = result?.logFilePath || ''
+
     this.logModal.innerHTML = `
-      <div style="background:#111; border:1px solid #333; border-radius:12px; width:90%; max-width:800px; max-height:80vh; display:flex; flex-direction:column;">
-        <div style="display:flex; align-items:center; justify-content:space-between; padding:1rem 1.25rem; border-bottom:1px solid #222;">
-          <span style="font-size:1rem; font-weight:600; color:#fff;">Logs (${lines.length} lines)</span>
-          <button id="close-logs-btn" style="background:none; border:none; color:#888; cursor:pointer; font-size:1.25rem;">✕</button>
+      <div style="background:#141414; border:1px solid #333; border-radius:12px; width:92%; max-width:900px; height:85vh; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 20px 50px rgba(0,0,0,0.8);">
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:0.875rem 1.25rem; border-bottom:1px solid #282828; background:#1a1a1a;">
+          <div>
+            <div style="display:flex; align-items:center; gap:0.5rem;">
+              <span style="font-size:1rem; font-weight:700; color:#fff;">Application Logs</span>
+              <span id="log-badge" style="font-size:0.75rem; background:#333; color:#aaa; padding:0.15rem 0.5rem; border-radius:20px;">${lines.length} lines</span>
+            </div>
+            ${logFilePath ? `<div style="font-size:0.6875rem; color:#666; margin-top:0.2rem; font-family:monospace; word-break:break-all;">${logFilePath}</div>` : ''}
+          </div>
+          <div style="display:flex; gap:0.5rem; align-items:center;">
+            <button id="log-copy-btn" style="padding:0.4rem 0.8rem; background:#222; border:1px solid #444; color:#ccc; border-radius:6px; font-size:0.8125rem; cursor:pointer;">Copy</button>
+            <button id="log-folder-btn" style="padding:0.4rem 0.8rem; background:#222; border:1px solid #444; color:#ccc; border-radius:6px; font-size:0.8125rem; cursor:pointer;">Open Folder</button>
+            <button id="log-clear-btn" style="padding:0.4rem 0.8rem; background:#222; border:1px solid #444; color:#ccc; border-radius:6px; font-size:0.8125rem; cursor:pointer;">Clear</button>
+            <button id="log-refresh-btn" style="padding:0.4rem 0.8rem; background:#fff; border:none; color:#000; border-radius:6px; font-size:0.8125rem; font-weight:600; cursor:pointer;">Refresh</button>
+            <button id="close-logs-btn" style="background:none; border:none; color:#888; cursor:pointer; font-size:1.25rem; padding:0 0.5rem;">✕</button>
+          </div>
         </div>
-        <pre style="flex:1; overflow:auto; padding:1rem 1.25rem; margin:0; font-size:0.6875rem; line-height:1.5; color:#aaa; font-family:ui-monospace,SFMono-Regular,monospace; white-space:pre-wrap;">${content || '(no logs yet)'}</pre>
+        <div style="padding:0.6rem 1.25rem; border-bottom:1px solid #222; background:#161616; display:flex; gap:0.75rem; align-items:center;">
+          <input id="log-filter-input" type="text" placeholder="Filter logs (e.g. DSLR, ERR, sony, upload)..." style="flex:1; padding:0.4rem 0.75rem; background:#0c0c0c; border:1px solid #333; border-radius:6px; color:#fff; font-size:0.8125rem; outline:none;" />
+          <span id="log-matched-text" style="font-size:0.75rem; color:#666;"></span>
+        </div>
+        <pre id="log-pre" style="flex:1; overflow:auto; padding:1rem 1.25rem; margin:0; font-size:0.75rem; line-height:1.55; color:#ccc; font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,monospace; background:#0d0d0d; white-space:pre-wrap; word-break:break-word;"></pre>
       </div>
     `
-    this.logModal.querySelector('#close-logs-btn')!.addEventListener('click', () => {
+
+    const pre = this.logModal.querySelector<HTMLPreElement>('#log-pre')!
+    const filterInput = this.logModal.querySelector<HTMLInputElement>('#log-filter-input')!
+    const matchedText = this.logModal.querySelector<HTMLSpanElement>('#log-matched-text')!
+    const badge = this.logModal.querySelector<HTMLSpanElement>('#log-badge')!
+    const copyBtn = this.logModal.querySelector<HTMLButtonElement>('#log-copy-btn')!
+    const folderBtn = this.logModal.querySelector<HTMLButtonElement>('#log-folder-btn')!
+    const clearBtn = this.logModal.querySelector<HTMLButtonElement>('#log-clear-btn')!
+    const refreshBtn = this.logModal.querySelector<HTMLButtonElement>('#log-refresh-btn')!
+    const closeBtn = this.logModal.querySelector<HTMLButtonElement>('#close-logs-btn')!
+
+    const render = () => {
+      const q = filterInput.value.trim().toLowerCase()
+      const filtered = q ? lines.filter((l: string) => l.toLowerCase().includes(q)) : lines
+      matchedText.textContent = q ? `${filtered.length} matched` : ''
+      pre.textContent = filtered.join('\n') || (q ? '(no matching log entries)' : '(no logs recorded yet)')
+      pre.scrollTop = pre.scrollHeight
+    }
+
+    render()
+
+    filterInput.addEventListener('input', render)
+
+    copyBtn.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(lines.join('\n'))
+        copyBtn.textContent = 'Copied!'
+        setTimeout(() => { copyBtn.textContent = 'Copy' }, 2000)
+      } catch {
+        copyBtn.textContent = 'Failed'
+      }
+    })
+
+    folderBtn.addEventListener('click', () => {
+      window.snapsync?.openLogFolder?.()
+    })
+
+    clearBtn.addEventListener('click', async () => {
+      await window.snapsync?.clearLogs?.()
+      lines = []
+      badge.textContent = '0 lines'
+      render()
+    })
+
+    refreshBtn.addEventListener('click', async () => {
+      const fresh = await window.snapsync?.getLogs()
+      lines = fresh?.lines || []
+      badge.textContent = `${lines.length} lines`
+      render()
+    })
+
+    closeBtn.addEventListener('click', () => {
       this.logModal!.style.display = 'none'
     })
+
     this.logModal.style.display = 'flex'
+    filterInput.focus()
   }
 
   hide() {

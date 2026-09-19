@@ -109,7 +109,7 @@ export class PhotoPreview {
     for (const p of paths) {
       const img = document.createElement('img')
       img.className = paths.length === 1 ? 'ui-photo-preview-img ui-photo-preview-img-full' : 'ui-photo-preview-img ui-photo-preview-img-half'
-      img.src = p.startsWith('blob:') || p.startsWith('http') ? p : `file://${p}`
+      img.src = p.startsWith('blob:') || p.startsWith('http') || p.startsWith('file://') ? p : `file://${p}`
       grid.appendChild(img)
     }
     this.overlay.appendChild(grid)

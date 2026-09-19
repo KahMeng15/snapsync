@@ -110,7 +110,10 @@ declare global {
       }) => Promise<any>
       getServerConfig: () => Promise<{ serverUrl: string }>
       killPtpDaemon: () => Promise<{ success: boolean; error?: string }>
-      getLogs: () => Promise<{ lines: string[] }>
+      getLogs: () => Promise<{ lines: string[]; logFilePath?: string }>
+      openLogFolder: () => Promise<{ ok: boolean; error?: string }>
+      clearLogs: () => Promise<{ ok: boolean }>
+      logRenderer: (level: string, message: string) => Promise<{ ok: boolean }>
 
       // ----------------------------------------------------------------
       // Push listeners (main → renderer)

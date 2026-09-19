@@ -75,6 +75,7 @@ app.on('ready', async () => {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
+      webSecurity: false,
     },
   })
 

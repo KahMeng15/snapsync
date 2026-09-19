@@ -1,4 +1,4 @@
-import { BrowserWindow, ipcMain, app, nativeImage } from 'electron'
+import { BrowserWindow, ipcMain, app, nativeImage, shell } from 'electron'
 import { DslrManager, killPtpDaemon } from './gphoto2'
 import { OfflineQueue } from './offlineQueue'
 import { readFile, writeFile, readdir } from 'fs/promises'
@@ -6,17 +6,26 @@ import path from 'path'
 import fs from 'fs'
 
 const SETTINGS_FILE = path.join(app.getPath('userData'), 'booth-settings.json')
+const LOGS_DIR = path.join(app.getPath('userData'), 'logs')
+const LOG_FILE = path.join(LOGS_DIR, 'app.log')
+
+try {
+  if (!fs.existsSync(LOGS_DIR)) fs.mkdirSync(LOGS_DIR, { recursive: true })
+} catch {}
 
 // ---------------------------------------------------------------------------
-// In-memory log buffer (captures console output for the "View Logs" button)
+// Log buffer & persistent file logging (captures console output)
 // ---------------------------------------------------------------------------
-const MAX_LOG_LINES = 1000
+const MAX_LOG_LINES = 2000
 const _logBuffer: string[] = []
 
 function _captureLog(level: string, args: any[]) {
-  const line = `[${new Date().toISOString().slice(11, 23)}][${level}] ${args.map(a => typeof a === 'string' ? a : JSON.stringify(a)).join(' ')}`
+  const line = `[${new Date().toISOString().slice(11, 23)}][${level}] ${args.map(a => typeof a === 'string' ? a : (a instanceof Error ? a.stack || a.message : JSON.stringify(a))).join(' ')}`
   _logBuffer.push(line)
   if (_logBuffer.length > MAX_LOG_LINES) _logBuffer.shift()
+  try {
+    fs.appendFileSync(LOG_FILE, line + '\n')
+  } catch {}
 }
 
 const _origLog = console.log
@@ -799,8 +808,34 @@ export function initIpcHandlers(
   // ------------------------------------------------------------------
   // View logs
   // ------------------------------------------------------------------
-  ipcMain.handle('get-logs', (): { lines: string[] } => {
-    return { lines: [..._logBuffer] }
+  ipcMain.handle('get-logs', (): { lines: string[]; logFilePath: string } => {
+    return { lines: [..._logBuffer], logFilePath: LOG_FILE }
+  })
+
+  ipcMain.handle('open-log-folder', async () => {
+    try {
+      if (fs.existsSync(LOG_FILE)) {
+        shell.showItemInFolder(LOG_FILE)
+      } else {
+        await shell.openPath(LOGS_DIR)
+      }
+      return { ok: true }
+    } catch (err: any) {
+      return { ok: false, error: err.message }
+    }
+  })
+
+  ipcMain.handle('clear-logs', () => {
+    _logBuffer.length = 0
+    try {
+      fs.writeFileSync(LOG_FILE, '')
+    } catch {}
+    return { ok: true }
+  })
+
+  ipcMain.handle('log-renderer', (_event, data: { level?: string; message: string }) => {
+    _captureLog(data.level || 'RENDERER', [data.message])
+    return { ok: true }
   })
   // ------------------------------------------------------------------
   // Upload queue management

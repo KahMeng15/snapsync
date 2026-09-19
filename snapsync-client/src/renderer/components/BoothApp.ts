@@ -418,13 +418,27 @@ export class BoothApp {
     Object.assign(settingsLink.style, {
       background: 'none', border: 'none', cursor: 'pointer',
       fontSize: '0.8125rem', color: '#444',
-      padding: '0.25rem 0', textDecoration: 'none',
+      padding: '0.25rem 0.5rem', textDecoration: 'none',
       transition: 'color 150ms',
     })
     settingsLink.addEventListener('mouseenter', () => { settingsLink.style.color = '#888' })
     settingsLink.addEventListener('mouseleave', () => { settingsLink.style.color = '#444' })
     settingsLink.addEventListener('click', () => this.openSettings('full'))
     this.landingEl.appendChild(settingsLink)
+
+    // Logs as hyperlink text
+    const logsLink = document.createElement('button')
+    logsLink.textContent = 'Logs'
+    Object.assign(logsLink.style, {
+      background: 'none', border: 'none', cursor: 'pointer',
+      fontSize: '0.8125rem', color: '#444',
+      padding: '0.25rem 0.5rem', textDecoration: 'none',
+      transition: 'color 150ms',
+    })
+    logsLink.addEventListener('mouseenter', () => { logsLink.style.color = '#888' })
+    logsLink.addEventListener('mouseleave', () => { logsLink.style.color = '#444' })
+    logsLink.addEventListener('click', () => this.settings.showLogs())
+    this.landingEl.appendChild(logsLink)
 
     // ------------------------------------------------------------------
     // Offline confirm modal
@@ -568,6 +582,7 @@ export class BoothApp {
       </p>
       <div style="display:flex;gap:0.75rem;justify-content:center;">
         <button id="dslr-retry-btn" style="padding:0.75rem 2rem;background:#fff;color:#000;border:none;border-radius:100px;font-size:1rem;font-weight:700;cursor:pointer;">Retry</button>
+        <button id="dslr-logs-btn" style="padding:0.75rem 1.5rem;background:transparent;color:#aaa;border:1px solid #444;border-radius:100px;font-size:1rem;cursor:pointer;">Logs</button>
         <button id="dslr-go-home-btn" style="padding:0.75rem 2rem;background:transparent;color:#888;border:1px solid #333;border-radius:100px;font-size:1rem;cursor:pointer;">Exit</button>
       </div>
     `
@@ -575,6 +590,7 @@ export class BoothApp {
     overlay.appendChild(box)
 
     box.querySelector('#dslr-retry-btn')!.addEventListener('click', () => this.retryDslrConnection())
+    box.querySelector('#dslr-logs-btn')!.addEventListener('click', () => this.settings.showLogs())
     box.querySelector('#dslr-go-home-btn')!.addEventListener('click', () => {
       this.hideDslrError()
       this.goHome()
@@ -611,6 +627,7 @@ export class BoothApp {
       </p>
       <div style="display:flex;gap:0.75rem;justify-content:center;">
         <button id="capture-error-ok-btn" style="padding:0.75rem 2rem;background:#fff;color:#000;border:none;border-radius:100px;font-size:1rem;font-weight:700;cursor:pointer;">OK</button>
+        <button id="capture-error-logs-btn" style="padding:0.75rem 1.5rem;background:transparent;color:#aaa;border:1px solid #444;border-radius:100px;font-size:1rem;cursor:pointer;">View Logs</button>
       </div>
     `
 
@@ -619,6 +636,9 @@ export class BoothApp {
     box.querySelector('#capture-error-ok-btn')!.addEventListener('click', () => {
       overlay.style.display = 'none'
       try { boothSocket?.emit('resolve-booth-error', { errorId: 'capture-error', action: 'dismiss' }) } catch {}
+    })
+    box.querySelector('#capture-error-logs-btn')!.addEventListener('click', () => {
+      this.settings.showLogs()
     })
 
     return overlay
@@ -1824,7 +1844,7 @@ export class BoothApp {
     const thumbs: string[] = []
     for (const p of paths) {
       try {
-        const src = p.startsWith('blob:') || p.startsWith('http') ? p : `file://${p}`
+        const src = p.startsWith('blob:') || p.startsWith('http') || p.startsWith('file://') ? p : `file://${p}`
         const img = new Image()
         img.src = src
         await new Promise((resolve, reject) => {
@@ -2045,7 +2065,8 @@ export class BoothApp {
   }
 
   private async showPostCapture(path: string, duration: number, currentShot: number, totalShots: number, signal?: AbortSignal) {
-    this.postCaptureEl.src = path
+    const src = path.startsWith('blob:') || path.startsWith('http') || path.startsWith('file://') ? path : `file://${path}`
+    this.postCaptureEl.src = src
     this.postCaptureEl.style.display = 'block'
 
     if (this.cameraMode === 'dslr') {
