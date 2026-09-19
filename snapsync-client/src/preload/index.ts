@@ -177,5 +177,8 @@ contextBridge.exposeInMainWorld('snapsync', {
     ipcRenderer.on('dslr-disconnected', (_event, info) => callback(info))
   },
 
+  setScreenMode: (mode: 'fullscreen' | 'windowed-fullscreen' | 'windowed') => ipcRenderer.invoke('set-screen-mode', mode),
+  closeApp: () => ipcRenderer.invoke('close-app'),
+
   getLogs: () => ipcRenderer.invoke('get-logs'),
 })

@@ -1016,3 +1016,20 @@ ipcMain.handle('persist-msg-seq-index', async (event, seqIndex) => {
   settings.msgSeqIndex = seqIndex
   fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2))
 })
+
+ipcMain.handle('set-screen-mode', (event, mode: 'fullscreen' | 'windowed-fullscreen' | 'windowed') => {
+  if (!_mainWindow) return
+  if (mode === 'fullscreen') {
+    _mainWindow.setFullScreen(true)
+  } else if (mode === 'windowed-fullscreen') {
+    _mainWindow.setFullScreen(false)
+    _mainWindow.maximize()
+  } else {
+    _mainWindow.setFullScreen(false)
+    _mainWindow.unmaximize()
+  }
+})
+
+ipcMain.handle('close-app', () => {
+  app.quit()
+})

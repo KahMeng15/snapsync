@@ -98,13 +98,94 @@ export class BoothApp {
     shutterOffsetDelay?: number
     settingsPasscode?: string
     emailEnabled?: number
+    inactivityTimeout?: number
   } = { photoCount: 4, countdown: 5, captureInterval: 1, postCapturePreview: 2, serverUrl: '', liveviewMode: 'mjpeg', autoPreview: false, liveviewRetryAttempts: 1, shutterOffsetDelay: 0, dslrWhiteBalance: 'auto', dslrWhiteBalanceKelvin: 5200 }
   private serverOnline = true
   private serverUrl = ''
+  private inactivityTimer: NodeJS.Timeout | null = null
+  private inactivityWarningTimer: NodeJS.Timeout | null = null
+  private inactivityOverlay?: HTMLDivElement
+  private inactivityCountdownEl?: HTMLHeadingElement
   private _state: BoothState = 'idle'
   private currentFullState: BoothStateFull = { state: 'idle', shareUrl: '', totalSessionsUploaded: 0, totalImagesUploaded: 0 }
   private currentSessionId: string | null = null
   private sessionAbortController?: AbortController
+
+  
+  public resetInactivityTimer = () => {
+    if (this.inactivityTimer) clearTimeout(this.inactivityTimer)
+    if (this.inactivityWarningTimer) clearInterval(this.inactivityWarningTimer)
+    if (this.inactivityOverlay) this.inactivityOverlay.style.display = 'none'
+
+    const timeout = this.settingsData?.inactivityTimeout ?? 30
+    if (timeout <= 0) return
+
+    if (this._state === 'idle' || this.isCapturing || this.isPauseActive) return
+
+    this.inactivityTimer = setTimeout(() => {
+      this.showInactivityWarning()
+    }, timeout * 1000)
+  }
+
+  private showInactivityWarning() {
+    if (this._state === 'idle' || this.isCapturing || this.isPauseActive) return
+    
+    let countdown = 5
+    if (!this.inactivityOverlay) {
+      this.inactivityOverlay = document.createElement('div')
+      this.inactivityOverlay.style.cssText = `
+        position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+        background: rgba(0, 0, 0, 0.85); z-index: 99999;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        color: white; font-family: system-ui, sans-serif; cursor: pointer;
+      `
+      const h2 = document.createElement('h2')
+      h2.textContent = 'Are you still there?'
+      h2.style.cssText = 'font-size: 3rem; margin-bottom: 1rem;'
+      this.inactivityOverlay.appendChild(h2)
+
+      this.inactivityCountdownEl = document.createElement('h1')
+      this.inactivityCountdownEl.style.cssText = 'font-size: 8rem; margin: 0; font-variant-numeric: tabular-nums;'
+      this.inactivityOverlay.appendChild(this.inactivityCountdownEl)
+      
+      const p = document.createElement('p')
+      p.textContent = 'Tap anywhere to continue'
+      p.style.cssText = 'font-size: 1.5rem; margin-top: 2rem; color: #aaa;'
+      this.inactivityOverlay.appendChild(p)
+      
+      this.inactivityOverlay.addEventListener('click', (e) => {
+        e.stopPropagation()
+        this.resetInactivityTimer()
+      })
+      this.inactivityOverlay.addEventListener('touchstart', (e) => {
+        e.stopPropagation()
+        this.resetInactivityTimer()
+      })
+
+      document.body.appendChild(this.inactivityOverlay)
+    }
+
+    this.inactivityCountdownEl!.textContent = String(countdown)
+    this.inactivityOverlay.style.display = 'flex'
+
+    this.inactivityWarningTimer = setInterval(() => {
+      countdown--
+      if (countdown <= 0) {
+        if (this.inactivityWarningTimer) clearInterval(this.inactivityWarningTimer)
+        this.inactivityOverlay!.style.display = 'none'
+        this.goHome()
+      } else {
+        this.inactivityCountdownEl!.textContent = String(countdown)
+      }
+    }, 1000)
+  }
+
+  private _setIsCapturing(val: boolean) {
+    this.resetInactivityTimer(); this.isCapturing = val
+    this.resetInactivityTimer()
+  }
+
+  // ---
 
   private updateLandingText() {
     if (this.landingBrandEl) {
@@ -425,10 +506,10 @@ export class BoothApp {
         }
         if (indices.length === 0 && (this.photoPreview as any).overlay.dataset.mode !== 'retake') {
           // It was cancelled
-          this._state = 'preview'
+          this.resetInactivityTimer(); this._state = 'preview'
           this.emitBoothStateFull({ phase: 'post-session', retakeIndices: [] })
         } else {
-          this._state = 'retake-selection'
+          this.resetInactivityTimer(); this._state = 'retake-selection'
           this.emitBoothStateFull({ phase: 'retake-selection', retakeIndices: indices })
         }
       }
@@ -618,8 +699,8 @@ export class BoothApp {
 
   private showDslrError(message?: string) {
     // Stop any active capture sequence
-    this.isCapturing = false
-    this._state = 'idle'
+    this.resetInactivityTimer(); this.isCapturing = false
+    this.resetInactivityTimer(); this._state = 'idle'
 
     const msgEl = this.dslrErrorOverlay.querySelector<HTMLParagraphElement>('#dslr-error-msg')
     if (msgEl && message) msgEl.textContent = message
@@ -809,19 +890,19 @@ export class BoothApp {
       this.emitBoothStateFull()
     } else if (cmd.type === 'enter-retake') {
       if (this._state === 'preview') {
-        this._state = 'retake-selection'
+        this.resetInactivityTimer(); this._state = 'retake-selection'
         this.photoPreview.showRetakeSelection()
         this.emitBoothStateFull({ phase: 'retake-selection', retakeIndices: [] })
       }
     } else if (cmd.type === 'update-retake') {
       if (this._state === 'retake-selection' || this._state === 'preview') {
-        this._state = 'retake-selection'
+        this.resetInactivityTimer(); this._state = 'retake-selection'
         this.photoPreview.updateRetakeSelection(cmd.indices || [])
         this.emitBoothStateFull({ phase: 'retake-selection', retakeIndices: cmd.indices || [] })
       }
     } else if (cmd.type === 'cancel-retake') {
       if (this._state === 'retake-selection') {
-        this._state = 'preview'
+        this.resetInactivityTimer(); this._state = 'preview'
         this.photoPreview.cancelRetakeSelection()
         this.emitBoothStateFull({ phase: 'post-session' })
       }
@@ -834,8 +915,9 @@ export class BoothApp {
       this.showCaptureProgress(this.settingsData.photoCount, 0)
       this.captureProgressText.textContent = `Shot 1 of ${this.settingsData.photoCount}`
       this.pauseBtn.style.display = 'none'
-      this.isCapturing = false
+      this.resetInactivityTimer(); this.isCapturing = false
       this._state = 'live'
+      this.resetInactivityTimer()
       this.currentPaths = []
       this.captureBtn.textContent = 'Start'
       this.captureBtn.style.display = 'block'
@@ -1005,6 +1087,12 @@ export class BoothApp {
   // -------------------------------------------------------------------------
 
   async mount() {
+    const bump = () => this.resetInactivityTimer()
+    document.addEventListener('click', bump)
+    document.addEventListener('mousemove', bump)
+    document.addEventListener('touchstart', bump)
+    document.addEventListener('keydown', bump)
+
     const settings = await window.snapsync?.getSettings()
     if (settings) {
       this.settingsData = { ...this.settingsData, ...settings }
@@ -1177,6 +1265,7 @@ export class BoothApp {
 
       this.isLive = true
       this._state = 'live'
+      this.resetInactivityTimer()
       this.emitBoothStateFull()
       this.captureBtn.textContent = 'Start'
       this.captureBtn.style.display = 'block'
@@ -1304,9 +1393,9 @@ export class BoothApp {
       this.hideCaptureProgress()
 
       this.isLive = false
-      this.isCapturing = false
+      this.resetInactivityTimer(); this.isCapturing = false
       this.pendingRetakes = null
-      this._state = 'idle'
+      this.resetInactivityTimer(); this._state = 'idle'
       this.currentFullState.shareUrl = ''
       this.currentFullState.phase = undefined
       this.currentFullState.countdown = undefined
@@ -1384,8 +1473,8 @@ export class BoothApp {
       return
     }
 
-    this.isCapturing = true
-    this._state = 'capturing'
+    this.resetInactivityTimer(); this.isCapturing = true
+    this.resetInactivityTimer(); this._state = 'capturing'
     this.emitBoothStateFull()
     this.captureBtn.textContent = 'Cancel'
     this.captureBtn.style.visibility = 'visible'
@@ -1541,7 +1630,7 @@ export class BoothApp {
           boothSocket?.emit('booth-error', { errorId: 'capture-error', type: 'capture', message: errMsg })
         } catch {}
         
-        this.isCapturing = false
+        this.resetInactivityTimer(); this.isCapturing = false
         this.captureBtn.style.visibility = 'visible'
         audioCtx.close()
         return
@@ -1555,8 +1644,9 @@ export class BoothApp {
     } else {
       this.hideCaptureProgress()
       this.pauseBtn.style.display = 'none'
-      this.isCapturing = false
+      this.resetInactivityTimer(); this.isCapturing = false
       this._state = 'live'
+      this.resetInactivityTimer()
       this.emitBoothStateFull()
     }
   }
@@ -1588,6 +1678,7 @@ export class BoothApp {
 
     this.isLive = true
     this._state = 'live'
+    this.resetInactivityTimer()
     this.emitBoothStateFull({ phase: undefined, retakeIndices: [] })
     
     this.captureBtn.style.display = 'block'
@@ -1599,8 +1690,8 @@ export class BoothApp {
 
   private async executeRetakePhotos(indices: number[]) {
     if (this.isCapturing || indices.length === 0) return
-    this.isCapturing = true
-    this._state = 'capturing'
+    this.resetInactivityTimer(); this.isCapturing = true
+    this.resetInactivityTimer(); this._state = 'capturing'
     this.emitBoothStateFull()
     
     this.photoPreview.hide()
@@ -1669,7 +1760,7 @@ export class BoothApp {
       if (!result.success) {
         if (this.cameraMode === 'dslr' && (result.error?.includes('not found') || result.error?.includes('disconnect'))) {
           this.showDslrError()
-          this.isCapturing = false
+          this.resetInactivityTimer(); this.isCapturing = false
           audioCtx.close()
           return
         } else {
@@ -1687,7 +1778,7 @@ export class BoothApp {
           if (msgEl) msgEl.innerHTML = this.formatCaptureError(errMsg)
           this.captureErrorOverlay.style.display = 'flex'
           try { boothSocket?.emit('booth-error', { errorId: 'capture-error', type: 'capture', message: errMsg }) } catch {}
-          this.isCapturing = false
+          this.resetInactivityTimer(); this.isCapturing = false
           audioCtx.close()
           return
         }
@@ -1785,8 +1876,8 @@ export class BoothApp {
 
     this.hideCaptureProgress()
     this.pauseBtn.style.display = 'none'
-    this.isCapturing = false
-    this._state = 'preview'
+    this.resetInactivityTimer(); this.isCapturing = false
+    this.resetInactivityTimer(); this._state = 'preview'
     const thumbnails = await this.generateThumbnails(paths)
     this.emitBoothStateFull({ phase: 'post-session', sessionPhotoPaths: paths, sessionThumbnails: thumbnails, isRetake: undefined, retakeIndices: [] })
     
@@ -1914,8 +2005,9 @@ export class BoothApp {
   // -------------------------------------------------------------------------
 
   private async reset() {
-    this.isCapturing = false
+    this.resetInactivityTimer(); this.isCapturing = false
     this._state = 'live'
+    this.resetInactivityTimer()
     this.emitBoothStateFull()
     this.captureBtn.style.visibility = 'visible'
     this.photoPreview.hide()

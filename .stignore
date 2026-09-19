@@ -1,0 +1,21 @@
+# Ignore node_modules
+node_modules/
+*/node_modules/
+*/*/node_modules/
+
+# Ignore build artifacts
+dist/
+out/
+public/app.js
+
+# Ignore Git
+.git/
+
+# Ignore databases & local logs
+storage/
+
+# Ignore Syncthing conflict files
+*.sync-conflict-*
+
+# Ignore env files
+.env

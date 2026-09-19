@@ -128,6 +128,9 @@ declare global {
       onDslrStatus: (callback: (status: { connected: boolean; model: string; liveviewActive: boolean }) => void) => void
       /** Fired when the camera is unplugged mid-session. */
       onDslrDisconnected: (callback: (info: { model: string }) => void) => void
+
+      setScreenMode: (mode: 'fullscreen' | 'windowed-fullscreen' | 'windowed') => void
+      closeApp: () => void
     }
   }
 }
