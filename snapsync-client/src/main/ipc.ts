@@ -357,6 +357,9 @@ export function initIpcHandlers(
   }
 
   // ------------------------------------------------------------------
+  let _detectInFlight: Promise<{ connected: boolean; model: string; cameras: any[]; whiteBalanceChoices: string[] }> | null = null
+
+  // ------------------------------------------------------------------
   // Detect DSLR (on-demand from renderer / settings panel)
   // ------------------------------------------------------------------
   ipcMain.handle('detect-dslr', async (): Promise<{ connected: boolean; model: string; cameras: any[]; whiteBalanceChoices: string[] }> => {
@@ -370,29 +373,42 @@ export function initIpcHandlers(
       return { connected: true, model: cached.model, cameras: cached.cameras, whiteBalanceChoices: choices }
     }
 
-    const { connected } = await dslrManager.detect()
-    if (connected) {
-      const cachedChoices = dslrManager.getStatus().configChoices
-      if (!cachedChoices?.iso || cachedChoices.iso.length <= 1) {
-        await dslrManager.fetchConfigChoices()
-      }
-    }
-    const status = dslrManager.getStatus()
-    const whiteBalanceChoices = status.configChoices?.whitebalance || []
-    console.log(`[IPC] detect-dslr result: connected=${connected}, model="${status.model}", wbChoices=${whiteBalanceChoices.length}`)
-
-    if (connected && status.model) {
-      const s = getSettingsSync()
-      if (!s.autoPreview) {
-        await syncCameraSettingsFromServer(status.model, false)
-      }
+    if (_detectInFlight) {
+      console.log('[IPC] detect-dslr already in progress — returning in-flight promise')
+      return _detectInFlight
     }
 
-    // Push updated status to renderer
-    if (!mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('dslr-status', status)
-    }
-    return { connected, model: status.model, cameras: status.cameras, whiteBalanceChoices }
+    _detectInFlight = (async () => {
+      try {
+        const { connected } = await dslrManager.detect()
+        if (connected) {
+          const cachedChoices = dslrManager.getStatus().configChoices
+          if (!cachedChoices?.iso || cachedChoices.iso.length <= 1) {
+            await dslrManager.fetchConfigChoices()
+          }
+        }
+        const status = dslrManager.getStatus()
+        const whiteBalanceChoices = status.configChoices?.whitebalance || []
+        console.log(`[IPC] detect-dslr result: connected=${connected}, model="${status.model}", wbChoices=${whiteBalanceChoices.length}`)
+
+        if (connected && status.model) {
+          const s = getSettingsSync()
+          if (!s.autoPreview) {
+            await syncCameraSettingsFromServer(status.model, false)
+          }
+        }
+
+        // Push updated status to renderer
+        if (!mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('dslr-status', status)
+        }
+        return { connected, model: status.model, cameras: status.cameras, whiteBalanceChoices }
+      } finally {
+        _detectInFlight = null
+      }
+    })()
+
+    return _detectInFlight
   })
 
   // ------------------------------------------------------------------

@@ -1079,13 +1079,6 @@ export class DslrManager {
         return this.detectWindows()
       }
       const res = await this.detectGphoto2()
-      if (res.connected && !skipConfigFetch) {
-        // Enqueue fetchConfigChoices through the mutex so it cannot hold
-        // the USB interface concurrently with liveview or capture operations.
-        // Previously this was fire-and-forget which left stale gphoto2 processes
-        // (e.g. "--get-config aperture") holding the USB claim when liveview started.
-        this.enqueue(() => this.fetchConfigChoices()).catch(() => {})
-      }
       return res
     })
   }
