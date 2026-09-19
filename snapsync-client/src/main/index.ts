@@ -3,7 +3,10 @@ import path from 'path'
 import fs from 'fs'
 import { initIpcHandlers, applyScreenMode } from './ipc'
 import { OfflineQueue } from './offlineQueue'
-import { DslrManager, restorePtpDaemons } from './gphoto2'
+import { DslrManager, restorePtpDaemons, fixSystemPath } from './gphoto2'
+
+// Ensure Homebrew and standard CLI paths are present in process.env.PATH for packaged macOS app
+fixSystemPath()
 
 let mainWindow: BrowserWindow | null = null
 let dslrManager: DslrManager

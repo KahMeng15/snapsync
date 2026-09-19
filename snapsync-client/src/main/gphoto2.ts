@@ -20,6 +20,61 @@ import path from 'path'
 import fs from 'fs'
 import { app, BrowserWindow } from 'electron'
 
+/**
+ * Ensure common CLI directories (Homebrew on Apple Silicon/Intel, MacPorts, etc.)
+ * are included in process.env.PATH. When an Electron app is packaged into a .app
+ * bundle on macOS and launched from Finder / Dock / Spotlight, process.env.PATH
+ * only contains system defaults (/usr/bin:/bin:/usr/sbin:/sbin), which causes
+ * external CLI tools like gphoto2 to fail with ENOENT.
+ */
+export function fixSystemPath(): void {
+  if (process.platform === 'darwin' || process.platform === 'linux') {
+    const extraPaths = [
+      '/opt/homebrew/bin',
+      '/opt/homebrew/sbin',
+      '/usr/local/bin',
+      '/usr/local/sbin',
+      '/opt/local/bin',
+      '/opt/local/sbin',
+      '/home/linuxbrew/.linuxbrew/bin',
+      `${process.env.HOME || ''}/.local/bin`,
+      '/usr/bin',
+      '/bin',
+      '/usr/sbin',
+      '/sbin',
+    ].filter(Boolean)
+
+    const currentPath = process.env.PATH || ''
+    const existing = new Set(currentPath.split(path.delimiter).filter(Boolean))
+    const toAdd = extraPaths.filter((p) => fs.existsSync(p) && !existing.has(p))
+    if (toAdd.length > 0) {
+      process.env.PATH = [...toAdd, currentPath].join(path.delimiter)
+    }
+  }
+}
+
+// Run immediately on module import
+fixSystemPath()
+
+/**
+ * Resolves the absolute path to the gphoto2 executable.
+ * Checks common installation paths directly if not found in PATH.
+ */
+export function getGphoto2Bin(): string {
+  const candidates = [
+    '/opt/homebrew/bin/gphoto2',
+    '/usr/local/bin/gphoto2',
+    '/opt/local/bin/gphoto2',
+    '/usr/bin/gphoto2',
+    '/bin/gphoto2',
+    `${process.env.HOME || ''}/.local/bin/gphoto2`,
+  ]
+  for (const c of candidates) {
+    if (c && fs.existsSync(c)) return c
+  }
+  return 'gphoto2'
+}
+
 // ---------------------------------------------------------------------------
 // Logger
 // ---------------------------------------------------------------------------
@@ -435,7 +490,7 @@ class Gphoto2LiveviewStream {
       args.push('--capture-movie', '--stdout')
       if (this.port) args.push(`--port=${this.port}`)
 
-      this.currentProc = spawn('gphoto2', args)
+      this.currentProc = spawn(getGphoto2Bin(), args, { env: process.env })
 
       const timeout = setTimeout(() => {
         if (!resolved) {
@@ -613,7 +668,7 @@ class Gphoto2LiveviewStream {
   /** Run gphoto2 with args, collect text output. */
   private execGphoto2(args: string[], timeoutMs: number): Promise<{ code: number | null; stdout: string; stderr: string }> {
     return new Promise((resolve) => {
-      const proc = spawn('gphoto2', args)
+      const proc = spawn(getGphoto2Bin(), args, { env: process.env })
       let stdout = ''
       let stderr = ''
       proc.stdout?.on('data', (d: Buffer) => { stdout += d.toString() })
@@ -636,7 +691,7 @@ class Gphoto2LiveviewStream {
   /** Run gphoto2 with args, collect raw stdout buffer (for binary data like JPEG). */
   private execGphoto2Buffer(args: string[], timeoutMs: number): Promise<{ code: number | null; buffer: Buffer; stderr: string }> {
     return new Promise((resolve) => {
-      const proc = spawn('gphoto2', args)
+      const proc = spawn(getGphoto2Bin(), args, { env: process.env })
       const chunks: Buffer[] = []
       let stderr = ''
       proc.stdout?.on('data', (d: Buffer) => { chunks.push(d) })
@@ -668,7 +723,7 @@ class Gphoto2LiveviewStream {
    */
   private killPtpNow(onDone: () => void): void {
     const detect = () => {
-      const det = spawn('gphoto2', ['--auto-detect'])
+      const det = spawn(getGphoto2Bin(), ['--auto-detect'], { env: process.env })
       let out = ''
       det.stdout?.on('data', (d: Buffer) => { out += d.toString() })
       det.on('close', () => {
@@ -1229,10 +1284,11 @@ export class DslrManager {
   }
 
   private detectGphoto2(): Promise<{ connected: boolean; model: string; cameras: { model: string, port: string }[] }> {
-    log.info('[DslrManager] Running: gphoto2 --auto-detect')
+    const bin = getGphoto2Bin()
+    log.info(`[DslrManager] Running: ${bin} --auto-detect`)
     return new Promise((resolve) => {
       try {
-        const proc = spawn('gphoto2', ['--auto-detect'])
+        const proc = spawn(bin, ['--auto-detect'], { env: process.env })
         let output = ''
         let stderr = ''
 
@@ -1567,7 +1623,8 @@ export class DslrManager {
       const t0 = Date.now()
       const label = args.slice(0, 3).join(' ')  // e.g. '--set-config /main/...' (truncated)
       log.info(`[DslrManager] ⏱ exec START: gphoto2 ${label}${args.length > 3 ? ' …' : ''}`)
-      const proc = this._trackChild(spawn('gphoto2', args))
+      const bin = getGphoto2Bin()
+      const proc = this._trackChild(spawn(bin, args, { env: process.env }))
       let stdout = ''
       let stderr = ''
       proc.stdout?.on('data', (d: Buffer) => { stdout += d.toString() })
@@ -1671,15 +1728,11 @@ export class DslrManager {
 
         let args: string[]
         if (this.cameraModel.toLowerCase().includes('sony') || this.cameraModel.toLowerCase().includes('alpha')) {
-          // Sony PTP capture: set capture=1 to fire shutter, then wait for the
-          // file download event. capture=0 is sent as a SEPARATE gphoto2 call
-          // after this process exits — do NOT chain it here. When chained in the
-          // same invocation, gphoto2 queues capture=0 but Sony firmware can
-          // interpret the trailing config write as a second trigger, or the
-          // 4s wait window keeps the shutter open in burst mode.
+          // Sony PTP capture: --trigger-capture sends the shutter trigger and
+          // --wait-event-and-download catches the file download event and transfers it.
           args = [
-            '--set-config', '/main/actions/capture=1',
-            '--wait-event-and-download=4s',
+            '--trigger-capture',
+            '--wait-event-and-download=5s',
             `--filename=${path.join(downloadDir, filenameTemplate)}`,
             '--force-overwrite',
             ...portArgs,
@@ -1699,7 +1752,8 @@ export class DslrManager {
         log.info(`[DslrManager] Download dir: ${downloadDir}`)
 
         const tShutter = Date.now()
-        const proc = spawn('gphoto2', args)
+        const bin = getGphoto2Bin()
+        const proc = spawn(bin, args, { env: process.env })
         let stdout = ''
         let stderr = ''
 
@@ -1782,7 +1836,9 @@ export class DslrManager {
             log.error(`[DslrManager] Dir scan error: ${scanErr.message}`)
           }
 
-          const errMsg = stderr.trim() || `gphoto2 exited with code ${code}`
+          const errMsg = stderr.trim() || (code === 0 
+            ? `No photo received from camera. Check camera 'PC Remote Still Image Save Destination' setting (must be PC or PC+Camera).` 
+            : `gphoto2 exited with code ${code}`)
           log.error(`[DslrManager] Capture failed. stderr: ${errMsg}`)
           // On failure, attempt to put the mirror back down and reset the camera.
           this.resetCameraAfterFailure()
