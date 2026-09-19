@@ -163,7 +163,9 @@ export function killPtpDaemon(): Promise<void> {
       `launchctl bootout ${UID} /System/Library/LaunchAgents/com.apple.imagecaptured.plist 2>/dev/null`,
       // Hard-kill any process still holding the camera USB interface
       `pkill -9 -f PTPCamera 2>/dev/null`,
+      `pkill -9 -f ptpcamerad 2>/dev/null`,
       `pkill -9 -f imagecaptured 2>/dev/null`,
+      `pkill -9 -f mscamerad 2>/dev/null`,
       `pkill -9 -f "Image Capture Extension" 2>/dev/null`,
       `pkill -9 -f "com.apple.photos.ImageCaptureService" 2>/dev/null`,
       // Kill any stale gphoto2 processes from a previous session
@@ -543,9 +545,15 @@ class Gphoto2LiveviewStream {
         procStderr += d.toString()
         if (procStderr.includes('Could not claim') && !resolved && !isRetrying) {
           isRetrying = true
-          log.warn(`[gphoto2 stream] USB claimed by PTPCamera (kill #${++this.ptpKillCount}) — pkilling and retrying...`)
           clearTimeout(timeout)
           this.killCurrentProc()
+          if (++this.ptpKillCount > 2) {
+            log.warn(`[gphoto2 stream] USB claimed by another process (limit reached: ${this.ptpKillCount}) — stopping MJPEG retries`)
+            resolved = true
+            resolve(false)
+            return
+          }
+          log.warn(`[gphoto2 stream] USB claimed by PTPCamera (kill #${this.ptpKillCount}) — pkilling and retrying...`)
           this.killPtpNow(() => {
             if (this.active) {
               this.tryMjpegStream(deadline).then((result) => {
@@ -646,9 +654,14 @@ class Gphoto2LiveviewStream {
             }
           } else if (result.stderr.includes('Could not claim')) {
             this.missCount++
-            log.warn(`[gphoto2 stream] USB claimed during poll #${pollCount} — killing PTPCamera`)
-            await this.killPtpNowAsync()
-            scheduleNextPoll(100)
+            if (++this.ptpKillCount <= 2) {
+              log.warn(`[gphoto2 stream] USB claimed during poll #${pollCount} — killing PTPCamera (kill #${this.ptpKillCount})`)
+              await this.killPtpNowAsync()
+              scheduleNextPoll(200)
+            } else {
+              log.warn(`[gphoto2 stream] USB claimed during poll #${pollCount} — kill limit reached, waiting for next poll`)
+              scheduleNextPoll(1000)
+            }
             return
           } else {
             this.missCount++
@@ -1077,30 +1090,42 @@ export class DslrManager {
     })
   }
 
-  public async fetchConfigChoices() {
-    if (this.isWindows) return
-    const keys = ['iso', 'shutterspeed', 'aperture', 'whitebalance']
-    for (const key of keys) {
-      try {
-        const portArgs = this.selectedPort ? [`--port=${this.selectedPort}`] : []
-        const res = await this.execGphoto2(['--get-config', key, ...portArgs], 10000)
-        if (res.code === 0) {
-          const choices = res.stdout.split('\n')
-            .filter(l => l.startsWith('Choice:'))
-            .map(l => l.replace(/^Choice:\s*\d+\s*/, '').trim())
-          if (choices.length > 0) {
-            this.configChoices[key] = choices
-            log.info(`[DslrManager] Fetched ${choices.length} choices for ${key}`)
-          }
-        }
-      } catch (err: any) {
-        log.warn(`[DslrManager] Failed to fetch choices for ${key}: ${err.message}`)
+  public async fetchConfigChoices(force = false): Promise<void> {
+    return this.enqueue(async () => {
+      if (this.isWindows || !this.connected) return
+      // If already cached and not forced, skip
+      if (!force && this.configChoices['iso'] && this.configChoices['iso'].length > 1) {
+        return
       }
-    }
-    // Push an updated status once choices are loaded
-    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-      this.mainWindow.webContents.send('dslr-status', this.getStatus())
-    }
+
+      const isSony = this.cameraModel.toLowerCase().includes('sony') || this.cameraModel.toLowerCase().includes('alpha')
+      // Sony Alpha in PC Remote mode does not expose aperture config
+      const keys = isSony
+        ? ['iso', 'shutterspeed', 'whitebalance']
+        : ['iso', 'shutterspeed', 'aperture', 'whitebalance']
+
+      for (const key of keys) {
+        try {
+          const portArgs = this.selectedPort ? [`--port=${this.selectedPort}`] : []
+          const res = await this.execGphoto2(['--get-config', key, ...portArgs], 2500)
+          if (res.code === 0) {
+            const choices = res.stdout.split('\n')
+              .filter(l => l.startsWith('Choice:'))
+              .map(l => l.replace(/^Choice:\s*\d+\s*/, '').trim())
+            if (choices.length > 0) {
+              this.configChoices[key] = choices
+              log.info(`[DslrManager] Fetched ${choices.length} choices for ${key}`)
+            }
+          }
+        } catch (err: any) {
+          log.warn(`[DslrManager] Failed to fetch choices for ${key}: ${err.message}`)
+        }
+      }
+      // Push an updated status once choices are loaded
+      if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+        this.mainWindow.webContents.send('dslr-status', this.getStatus())
+      }
+    })
   }
 
   async getHardwareSettings(): Promise<{ iso: string, shutterspeed: string, aperture: string, whitebalance: string }> {
@@ -1108,11 +1133,15 @@ export class DslrManager {
       const hw = { iso: 'auto', shutterspeed: 'auto', aperture: 'auto', whitebalance: 'auto' }
       if (this.isWindows || !this.connected) return hw
       
-      const keys = ['iso', 'shutterspeed', 'aperture', 'whitebalance']
+      const isSony = this.cameraModel.toLowerCase().includes('sony') || this.cameraModel.toLowerCase().includes('alpha')
+      const keys = isSony
+        ? ['iso', 'shutterspeed', 'whitebalance']
+        : ['iso', 'shutterspeed', 'aperture', 'whitebalance']
+
       for (const key of keys) {
         try {
           const portArgs = this.selectedPort ? [`--port=${this.selectedPort}`] : []
-          const res = await this.execGphoto2(['--get-config', key, ...portArgs], 5000)
+          const res = await this.execGphoto2(['--get-config', key, ...portArgs], 2000)
           if (res.code === 0) {
             const match = res.stdout.match(/Current:\s*(.+)/)
             if (match && match[1]) {
@@ -1161,8 +1190,10 @@ export class DslrManager {
 
   /** Apply auto exposure for configs that have a valid "Auto" choice. */
   private async _applyConfigAuto(): Promise<void> {
+    const isSony = this.cameraModel.toLowerCase().includes('sony') || this.cameraModel.toLowerCase().includes('alpha')
+    const candidateKeys = isSony ? ['iso', 'whitebalance'] : ['iso', 'shutterspeed', 'aperture', 'whitebalance']
     const configArgs: string[] = []
-    for (const key of ['iso', 'shutterspeed', 'aperture', 'whitebalance'] as const) {
+    for (const key of candidateKeys as ('iso' | 'shutterspeed' | 'aperture' | 'whitebalance')[]) {
       const choices = this.configChoices[key]
       if (choices && choices.length > 0) {
         const autoVal = choices.find(c => c.toLowerCase() === 'auto')
@@ -1639,7 +1670,7 @@ export class DslrManager {
       proc.stderr?.on('data', (d: Buffer) => { stderr += d.toString() })
       const timer = setTimeout(() => {
         log.warn(`[DslrManager] ⏱ exec TIMEOUT after ${timeoutMs} ms: gphoto2 ${label}`)
-        proc.kill()
+        proc.kill('SIGKILL')
         resolve({ code: null, stdout, stderr })
       }, timeoutMs)
       proc.on('close', (code) => {
@@ -1769,7 +1800,7 @@ export class DslrManager {
         const captureTimeout = setTimeout(() => {
           if (this.capturing) {
             log.error(`[DslrManager] ⏱ Capture timed out after 30 s (t+${Date.now() - tCapStart} ms) — killing gphoto2`)
-            proc.kill()
+            proc.kill('SIGKILL')
             this.resetCameraAfterFailure()
             resolve({ success: false, error: 'Capture timeout (30 s)' })
           }

@@ -234,23 +234,9 @@ export function initIpcHandlers(
         return { success: false, error: msg }
       }
 
-      await dslrManager.restorePendingSettings()
-      await dslrManager.snapshotOriginalSettings()
-
       const savedSettings = getSettingsSync()
-      const autoPreview = !!savedSettings.autoPreview
-      if (!autoPreview && dslrManager.getStatus().model) {
-        await syncCameraSettingsFromServer(dslrManager.getStatus().model, true)
-      }
-
-      // If autoPreview is on, reset camera to auto exposure before starting liveview
-      if (autoPreview) {
-        console.log('[IPC] autoPreview — resetting camera to auto exposure')
-        await dslrManager.applyAutoExposure()
-      }
-
-      console.log('[IPC] Camera detected — starting liveview stream (will kill PTPCamera on macOS, then wait for first frame)...')
       const liveviewMode: 'mjpeg' | 'polling' = savedSettings.liveviewMode || 'mjpeg'
+      console.log(`[IPC] Camera detected — starting liveview stream (mode: ${liveviewMode})...`)
       console.log(`[IPC] start-dslr-liveview — liveviewMode from settings: ${liveviewMode}`)
       let framesSent = 0
       _liveviewFrameCallback = (jpeg) => {
@@ -385,9 +371,11 @@ export function initIpcHandlers(
     }
 
     const { connected } = await dslrManager.detect()
-    // Wait for config choices so the UI gets the actual camera white balance presets
     if (connected) {
-      await dslrManager.fetchConfigChoices()
+      const cachedChoices = dslrManager.getStatus().configChoices
+      if (!cachedChoices?.iso || cachedChoices.iso.length <= 1) {
+        await dslrManager.fetchConfigChoices()
+      }
     }
     const status = dslrManager.getStatus()
     const whiteBalanceChoices = status.configChoices?.whitebalance || []
@@ -396,7 +384,7 @@ export function initIpcHandlers(
     if (connected && status.model) {
       const s = getSettingsSync()
       if (!s.autoPreview) {
-        await syncCameraSettingsFromServer(status.model)
+        await syncCameraSettingsFromServer(status.model, false)
       }
     }
 
