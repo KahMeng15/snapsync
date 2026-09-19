@@ -1,0 +1,1669 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SnapSync — Free, Self-Hosted Photo Booth for Events</title>
+  <meta name="description" content="Turn any DSLR, mirrorless camera, or webcam into an event marketing photobooth. 100% free, self-hosted, with instant QR sharing and custom branded frames.">
+  <style>
+    /* ============================================================
+       Design Tokens (Directly matching SnapSync tokens.css)
+       ============================================================ */
+    :root {
+      --color-bg: #0a0a0a;
+      --color-surface: #141414;
+      --color-surface-alt: #1c1c1c;
+      --color-surface-elevated: #242424;
+      --color-border: #2a2a2a;
+      --color-border-sub: #1f1f1f;
+      --color-text: #f0f0f0;
+      --color-text-sub: #999999;
+      --color-text-muted: #555555;
+      --color-accent: #ffffff;
+      --color-accent-fg: #000000;
+      --color-success: #22c55e;
+      --color-warning: #fbbf24;
+      --color-error: #ef4444;
+      --color-info: #60a5fa;
+
+      --space-1: 0.25rem;
+      --space-2: 0.5rem;
+      --space-3: 0.75rem;
+      --space-4: 1rem;
+      --space-5: 1.25rem;
+      --space-6: 1.5rem;
+      --space-8: 2rem;
+      --space-10: 2.5rem;
+      --space-12: 3rem;
+      --space-16: 4rem;
+
+      --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      --font-mono: 'SF Mono', 'Fira Code', Menlo, Consolas, monospace;
+
+      --radius-sm: 4px;
+      --radius-md: 8px;
+      --radius-lg: 12px;
+      --radius-xl: 16px;
+      --radius-pill: 100px;
+      --radius-full: 50%;
+
+      --transition-base: 150ms ease;
+      --transition-slow: 300ms ease;
+    }
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--color-bg);
+      color: var(--color-text);
+      font-family: var(--font-sans);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 1140px;
+      margin: 0 auto;
+      padding: 0 1.5rem;
+    }
+
+    .lucide {
+      width: 1.15rem;
+      height: 1.15rem;
+      stroke-width: 2;
+      stroke: currentColor;
+      fill: none;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      vertical-align: middle;
+      display: inline-block;
+      flex-shrink: 0;
+    }
+
+    /* ============================================================
+       Header Navigation
+       ============================================================ */
+    .header {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      background-color: rgba(10, 10, 10, 0.85);
+      border-bottom: 1px solid var(--color-border-sub);
+    }
+
+    .header-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 64px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      font-weight: 700;
+      font-size: 1.15rem;
+      letter-spacing: -0.02em;
+    }
+
+    .brand-icon {
+      width: 28px;
+      height: 28px;
+      background: var(--color-accent);
+      color: var(--color-accent-fg);
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .brand-icon .lucide {
+      width: 16px;
+      height: 16px;
+      stroke: #000000;
+    }
+
+    .nav-actions {
+      display: flex;
+      align-items: center;
+      gap: 1.25rem;
+    }
+
+    .nav-link {
+      font-size: 0.875rem;
+      color: var(--color-text-sub);
+      transition: color var(--transition-base);
+      display: none;
+    }
+
+    @media (min-width: 768px) {
+      .nav-link { display: inline-flex; align-items: center; }
+    }
+
+    .nav-link:hover {
+      color: var(--color-text);
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      font-size: 0.875rem;
+      font-weight: 600;
+      padding: 0.55rem 1.2rem;
+      border-radius: var(--radius-pill);
+      cursor: pointer;
+      transition: all var(--transition-base);
+      border: 1px solid transparent;
+      font-family: var(--font-sans);
+    }
+
+    .btn-primary {
+      background: var(--color-accent);
+      color: var(--color-accent-fg);
+    }
+
+    .btn-primary:hover {
+      opacity: 0.9;
+      transform: translateY(-1px);
+    }
+
+    .btn-secondary {
+      background: transparent;
+      color: var(--color-text);
+      border-color: var(--color-border);
+    }
+
+    .btn-secondary:hover {
+      background: var(--color-surface);
+      border-color: var(--color-text-sub);
+      transform: translateY(-1px);
+    }
+
+    /* ============================================================
+       Hero Section
+       ============================================================ */
+    .hero {
+      padding: 5rem 0 3.5rem;
+      text-align: center;
+      position: relative;
+    }
+
+    .hero-content {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+
+    .hero-title {
+      font-size: 2.75rem;
+      font-weight: 800;
+      letter-spacing: -0.035em;
+      line-height: 1.15;
+      margin-bottom: 1.25rem;
+    }
+
+    @media (min-width: 768px) {
+      .hero-title {
+        font-size: 3.75rem;
+      }
+    }
+
+    .hero-title span.dim {
+      color: var(--color-text-sub);
+      font-weight: 600;
+    }
+
+    .hero-subtitle {
+      font-size: 1.125rem;
+      color: var(--color-text-sub);
+      max-width: 620px;
+      margin: 0 auto 2.25rem;
+      font-weight: 400;
+      line-height: 1.6;
+    }
+
+    @media (min-width: 768px) {
+      .hero-subtitle {
+        font-size: 1.25rem;
+      }
+    }
+
+    .hero-cta-group {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+      gap: 0.85rem;
+      margin-bottom: 3.5rem;
+    }
+
+    /* ============================================================
+       Live Demo: Actual SnapSync Client UI Simulation
+       ============================================================ */
+    .app-window {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+      max-width: 960px;
+      margin: 0 auto 5rem;
+      overflow: hidden;
+      text-align: left;
+    }
+
+    .window-titlebar {
+      height: 38px;
+      background: #111111;
+      border-bottom: 1px solid var(--color-border-sub);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 1rem;
+      user-select: none;
+    }
+
+    .window-controls {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .window-dot {
+      width: 11px;
+      height: 11px;
+      border-radius: var(--radius-full);
+    }
+    .dot-close { background: #ff5f56; }
+    .dot-min { background: #ffbd2e; }
+    .dot-max { background: #27c93f; }
+
+    .window-title {
+      font-size: 0.75rem;
+      color: var(--color-text-muted);
+      font-family: var(--font-mono);
+      letter-spacing: 0.02em;
+    }
+
+
+
+    /* Booth Screen Viewport */
+    .booth-viewport {
+      min-height: 480px;
+      background: var(--color-bg);
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* 1. Standby Screen (Matches BoothApp.ts .booth-landing with actual messages) */
+    .booth-landing-state {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: var(--color-bg);
+      gap: 1.25rem;
+      z-index: 10;
+      padding: 2rem;
+      transition: opacity var(--transition-slow);
+    }
+
+    .sim-landing-brand {
+      font-size: 2.5rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--color-text);
+      text-align: center;
+      margin: 0;
+      max-width: 90%;
+    }
+
+    .sim-landing-subtitle {
+      font-size: 1.15rem;
+      color: var(--color-text-sub);
+      font-weight: 500;
+      margin-top: -0.5rem;
+      text-align: center;
+    }
+
+    .sim-start-btn {
+      padding: 1.1rem 4rem;
+      font-size: 1.35rem;
+      font-weight: 700;
+      background: #ffffff;
+      color: #000000;
+      border: none;
+      border-radius: var(--radius-pill);
+      cursor: pointer;
+      font-family: var(--font-sans);
+      margin-top: 0.5rem;
+      transition: transform var(--transition-base), opacity var(--transition-base);
+    }
+
+    .sim-start-btn:hover {
+      opacity: 0.9;
+      transform: scale(1.02);
+    }
+
+    .sim-past-sessions-btn {
+      padding: 0.5rem 1.25rem;
+      background: transparent;
+      color: #888888;
+      border: 1px solid #333333;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.8125rem;
+      font-weight: 500;
+      transition: color var(--transition-base), border-color var(--transition-base);
+    }
+
+    .sim-past-sessions-btn:hover {
+      color: #cccccc;
+      border-color: #555555;
+    }
+
+    .sim-settings-link {
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 0.8125rem;
+      color: #444444;
+      padding: 0.25rem 0.5rem;
+      transition: color var(--transition-base);
+    }
+
+    .sim-settings-link:hover {
+      color: #888888;
+    }
+
+    .sim-landing-footer {
+      position: absolute;
+      bottom: 1.5rem;
+      width: 100%;
+      text-align: center;
+      font-size: 1.1rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: #333333;
+      user-select: none;
+    }
+
+    /* 2. Capture / Viewfinder State */
+    .booth-capture-state {
+      position: absolute;
+      inset: 0;
+      background: #000000;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 5;
+    }
+
+    .camera-live-feed {
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at center, #222222 0%, #080808 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .subject-silhouette {
+      width: 160px;
+      height: 220px;
+      opacity: 0.25;
+      color: #ffffff;
+    }
+
+    .capture-countdown-num {
+      position: absolute;
+      font-size: 8rem;
+      font-weight: 900;
+      font-family: var(--font-mono);
+      color: #ffffff;
+      z-index: 15;
+      text-shadow: 0 0 30px rgba(0, 0, 0, 0.8);
+      animation: simPop 0.8s ease-out;
+    }
+
+    @keyframes simPop {
+      0% { transform: scale(1.4); opacity: 0; }
+      50% { transform: scale(1); opacity: 1; }
+      100% { opacity: 0.9; }
+    }
+
+    .booth-flash-layer {
+      position: absolute;
+      inset: 0;
+      background: #ffffff;
+      opacity: 0;
+      pointer-events: none;
+      z-index: 25;
+    }
+
+    .booth-flash-active {
+      animation: simFlash 0.35s ease-out forwards;
+    }
+
+    @keyframes simFlash {
+      0% { opacity: 1; }
+      100% { opacity: 0; }
+    }
+
+    .sim-capture-progress {
+      position: absolute;
+      bottom: 1.5rem;
+      left: 1.5rem;
+      z-index: 20;
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+      font-family: var(--font-sans);
+    }
+
+    .sim-progress-text {
+      font-size: 0.8125rem;
+      font-weight: 600;
+      color: var(--color-text);
+    }
+
+    .sim-progress-bars {
+      display: flex;
+      gap: 0.3rem;
+    }
+
+    .sim-progress-bar-slot {
+      width: 1.75rem;
+      height: 4px;
+      border-radius: 2px;
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    .sim-progress-bar-slot.filled {
+      background: var(--color-accent);
+    }
+
+    /* 3. Post Capture Review State: Exact match to PhotoPreview.ts */
+    .ui-photo-preview-overlay {
+      position: absolute;
+      inset: 0;
+      background: var(--color-bg);
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+      z-index: 50;
+    }
+
+    .ui-photo-preview-title {
+      font-size: 1.75rem;
+      font-weight: 700;
+      color: var(--color-text);
+      margin-bottom: 1.25rem;
+      letter-spacing: -0.02em;
+    }
+
+    .event-framed-strip {
+      width: 220px;
+      background: #ffffff;
+      color: #111111;
+      padding: 0.75rem;
+      border-radius: var(--radius-sm);
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.6);
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+      margin-bottom: 1.5rem;
+      transition: all var(--transition-slow);
+    }
+
+    .frame-branding-header {
+      text-align: center;
+      padding-bottom: 0.3rem;
+      border-bottom: 1.5px solid #111111;
+    }
+
+    .frame-brand-title {
+      font-size: 0.75rem;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .frame-brand-tagline {
+      font-size: 0.58rem;
+      color: #555555;
+      font-weight: 500;
+    }
+
+    .frame-photo-slot {
+      width: 100%;
+      height: 58px;
+      background: #ececec;
+      border-radius: 2px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .frame-photo-slot svg {
+      width: 36px;
+      height: 36px;
+      color: #888888;
+      opacity: 0.6;
+    }
+
+    .frame-branding-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-top: 0.3rem;
+      border-top: 1px dashed #d1d1d1;
+      font-size: 0.62rem;
+      font-family: var(--font-mono);
+      color: #666666;
+    }
+
+    .ui-photo-preview-actions {
+      display: flex;
+      gap: 1rem;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .ui-photo-btn-retake {
+      padding: 0.65rem 1.75rem;
+      background: transparent;
+      color: var(--color-text);
+      border: 1px solid var(--color-text-muted);
+      border-radius: var(--radius-pill);
+      cursor: pointer;
+      font-size: 0.95rem;
+      font-weight: 600;
+      font-family: var(--font-sans);
+      transition: border-color var(--transition-base);
+    }
+
+    .ui-photo-btn-retake:hover {
+      border-color: var(--color-text);
+    }
+
+    .ui-photo-btn-confirm {
+      padding: 0.65rem 2rem;
+      background: var(--color-accent);
+      color: var(--color-accent-fg);
+      border: none;
+      border-radius: var(--radius-pill);
+      font-weight: 700;
+      cursor: pointer;
+      font-size: 0.95rem;
+      font-family: var(--font-sans);
+      transition: opacity var(--transition-base);
+    }
+
+    .ui-photo-btn-confirm:hover {
+      opacity: 0.9;
+    }
+
+    .ui-photo-btn-share {
+      padding: 0.65rem 2rem;
+      background: var(--color-info);
+      color: #ffffff;
+      border: none;
+      border-radius: var(--radius-pill);
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 0.95rem;
+      font-family: var(--font-sans);
+      transition: opacity var(--transition-base);
+    }
+
+    .ui-photo-btn-share:hover {
+      opacity: 0.9;
+    }
+
+    /* 4. QR Modal Overlay: Exact match to PhotoPreview.ts showQR */
+    .ui-qr-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.85);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 60;
+    }
+
+    .ui-qr-box {
+      background: #ffffff;
+      color: #000000;
+      padding: 2rem;
+      border-radius: var(--radius-xl);
+      text-align: center;
+      max-width: 90%;
+      width: 340px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+    }
+
+    .ui-qr-title {
+      color: #0a0a0a;
+      margin: 0 0 1rem;
+      font-size: 1.35rem;
+      font-weight: 700;
+    }
+
+    .ui-qr-img {
+      width: 180px;
+      height: 180px;
+      margin-bottom: 1rem;
+      display: block;
+    }
+
+    .ui-qr-link {
+      color: #666666;
+      font-size: 0.8rem;
+      margin: 0 0 1.25rem;
+      word-break: break-all;
+      max-width: 300px;
+      font-family: var(--font-mono);
+    }
+
+    .ui-qr-close-btn {
+      padding: 0.5rem 1.75rem;
+      font-size: 0.875rem;
+      font-weight: 600;
+      background: transparent;
+      color: #111111;
+      border: 1px solid #cccccc;
+      border-radius: var(--radius-pill);
+      cursor: pointer;
+      transition: all var(--transition-base);
+    }
+
+    .ui-qr-close-btn:hover {
+      background: #f0f0f0;
+      border-color: #999999;
+    }
+
+    /* Simulator Interactive Config Tray */
+    .simulator-config-tray {
+      background: #111111;
+      border-top: 1px solid var(--color-border-sub);
+      padding: 0.85rem 1.25rem;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      font-size: 0.8125rem;
+    }
+
+    .tray-group {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+    }
+
+    .tray-label {
+      color: var(--color-text-muted);
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      text-transform: uppercase;
+    }
+
+    .tray-btn-group {
+      display: flex;
+      gap: 0.35rem;
+      background: var(--color-bg);
+      padding: 2px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--color-border-sub);
+    }
+
+    .tray-pill {
+      background: transparent;
+      border: none;
+      color: var(--color-text-sub);
+      font-size: 0.75rem;
+      padding: 0.25rem 0.65rem;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: all var(--transition-base);
+      font-family: var(--font-sans);
+    }
+
+    .tray-pill.active {
+      background: var(--color-surface-elevated);
+      color: var(--color-text);
+      font-weight: 600;
+    }
+
+    /* ============================================================
+       Features Section
+       ============================================================ */
+    .features-section {
+      padding: 5rem 0;
+    }
+
+    .section-header {
+      text-align: center;
+      max-width: 620px;
+      margin: 0 auto 3.5rem;
+    }
+
+    .section-kicker {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: var(--color-text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 0.5rem;
+      font-weight: 600;
+    }
+
+    .section-title {
+      font-size: 2rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      margin-bottom: 0.75rem;
+    }
+
+    .section-desc {
+      color: var(--color-text-sub);
+      font-size: 1rem;
+    }
+
+    .features-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 1.5rem;
+    }
+
+    @media (min-width: 768px) {
+      .features-grid {
+        grid-template-columns: repeat(3, 1fr);
+      }
+    }
+
+    .feature-card {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      padding: 1.75rem;
+      transition: border-color var(--transition-base);
+    }
+
+    .feature-card:hover {
+      border-color: var(--color-text-muted);
+    }
+
+    .feature-icon {
+      width: 40px;
+      height: 40px;
+      background: var(--color-surface-alt);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--color-text);
+      margin-bottom: 1.25rem;
+    }
+
+    .feature-card h3 {
+      font-size: 1.15rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+      letter-spacing: -0.02em;
+    }
+
+    .feature-card p {
+      color: var(--color-text-sub);
+      font-size: 0.925rem;
+      line-height: 1.55;
+    }
+
+    /* ============================================================
+       Hardware Support Matrix
+       ============================================================ */
+    .hardware-section {
+      padding: 5rem 0;
+      background: var(--color-surface);
+      border-top: 1px solid var(--color-border-sub);
+      border-bottom: 1px solid var(--color-border-sub);
+    }
+
+    .hardware-cards {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 1.5rem;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    @media (min-width: 768px) {
+      .hardware-cards {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    .hardware-card {
+      background: var(--color-bg);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      padding: 2rem;
+    }
+
+    .hardware-type {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: var(--color-text-muted);
+      text-transform: uppercase;
+      margin-bottom: 0.5rem;
+      font-weight: 600;
+    }
+
+    .hardware-card h3 {
+      font-size: 1.35rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+    }
+
+    .hardware-card p {
+      color: var(--color-text-sub);
+      font-size: 0.9rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .hardware-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+      font-size: 0.85rem;
+    }
+
+    .hardware-list li {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: var(--color-text);
+    }
+
+    .hardware-list .lucide-check {
+      color: var(--color-success);
+      width: 1rem;
+      height: 1rem;
+    }
+
+    /* ============================================================
+       How It Works / Steps
+       ============================================================ */
+    .steps-section {
+      padding: 5.5rem 0;
+    }
+
+    .steps-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 2rem;
+    }
+
+    @media (min-width: 768px) {
+      .steps-grid {
+        grid-template-columns: repeat(3, 1fr);
+      }
+    }
+
+    .step-item {
+      border-left: 2px solid var(--color-border);
+      padding-left: 1.5rem;
+      transition: border-left-color var(--transition-base);
+    }
+
+    .step-item:hover {
+      border-left-color: var(--color-accent);
+    }
+
+    .step-num {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: var(--color-text-muted);
+      margin-bottom: 0.4rem;
+    }
+
+    .step-item h4 {
+      font-size: 1.15rem;
+      font-weight: 700;
+      margin-bottom: 0.4rem;
+    }
+
+    .step-item p {
+      color: var(--color-text-sub);
+      font-size: 0.9rem;
+    }
+
+    /* ============================================================
+       Contact CTA Section
+       ============================================================ */
+    .cta-section {
+      padding: 5rem 0 6.5rem;
+    }
+
+    .cta-card {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-xl);
+      padding: 3.5rem 2rem;
+      text-align: center;
+      max-width: 800px;
+      margin: 0 auto;
+      position: relative;
+    }
+
+    .cta-title {
+      font-size: 2.15rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      margin-bottom: 0.85rem;
+    }
+
+    .cta-desc {
+      color: var(--color-text-sub);
+      font-size: 1.05rem;
+      max-width: 540px;
+      margin: 0 auto 2.25rem;
+    }
+
+    .contact-action-bar {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1rem;
+    }
+
+    .email-display-pill {
+      background: var(--color-bg);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-pill);
+      padding: 0.45rem 1rem;
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      color: var(--color-text);
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+    }
+
+    .copy-btn {
+      background: var(--color-surface-elevated);
+      border: 1px solid var(--color-border);
+      color: var(--color-text-sub);
+      border-radius: var(--radius-sm);
+      width: 26px;
+      height: 26px;
+      padding: 0;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: all var(--transition-base);
+    }
+
+    .copy-btn .lucide {
+      width: 13px;
+      height: 13px;
+    }
+
+    .copy-btn:hover {
+      background: #ffffff;
+      color: #000000;
+    }
+
+    .copy-toast {
+      position: absolute;
+      bottom: 1.25rem;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--color-success);
+      color: #000000;
+      font-size: 0.75rem;
+      font-weight: 700;
+      padding: 0.35rem 0.85rem;
+      border-radius: var(--radius-pill);
+      opacity: 0;
+      transition: opacity 0.2s ease;
+      pointer-events: none;
+    }
+
+    .copy-toast.visible {
+      opacity: 1;
+    }
+
+    /* ============================================================
+       Footer
+       ============================================================ */
+    .footer {
+      border-top: 1px solid var(--color-border-sub);
+      padding: 2rem 0;
+      text-align: center;
+      font-size: 0.8125rem;
+      color: var(--color-text-muted);
+    }
+
+    .footer a {
+      color: var(--color-text-sub);
+    }
+
+    .footer a:hover {
+      color: var(--color-text);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header class="header">
+    <div class="container header-inner">
+      <div class="brand">
+        <div class="brand-icon">
+          <svg class="lucide lucide-camera" viewBox="0 0 24 24">
+            <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/>
+            <circle cx="12" cy="13" r="3"/>
+          </svg>
+        </div>
+        <span>snapsync</span>
+      </div>
+
+      <nav class="nav-actions">
+        <a href="#demo" class="nav-link">Live Demo</a>
+        <a href="#features" class="nav-link">Features</a>
+        <a href="#hardware" class="nav-link">Hardware</a>
+        <a href="https://github.com/KahMeng15/snapsync" target="_blank" class="nav-link">GitHub</a>
+        <a href="mailto:kmeng.work@gmail.com" class="btn btn-primary">Contact Creator</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <!-- Hero Header -->
+    <section class="hero">
+      <div class="container hero-content">
+        <h1 class="hero-title">
+          The Free, Self-Hosted Photo Booth <br>
+          <span class="dim">for Event Marketing & Social Reach.</span>
+        </h1>
+
+        <p class="hero-subtitle">
+          Turn your digital camera or webcam into an interactive photo booth. Distribute instant branded photos straight to guests' phones via on-screen QR codes without monthly subscription fees.
+        </p>
+
+        <div class="hero-cta-group">
+          <a href="mailto:kmeng.work@gmail.com?subject=SnapSync%20Event%20Inquiry" class="btn btn-primary">
+            Contact for Events & Setup
+            <svg class="lucide" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+          </a>
+          <a href="https://github.com/KahMeng15/snapsync" target="_blank" class="btn btn-secondary">
+            Star on GitHub
+          </a>
+        </div>
+      </div>
+
+      <!-- Live Demo: Interactive SnapSync Client Simulation -->
+      <div class="container" id="demo">
+        <div class="app-window">
+          <!-- Window Header / Titlebar -->
+          <div class="window-titlebar">
+            <div class="window-controls">
+              <span class="window-dot dot-close"></span>
+              <span class="window-dot dot-min"></span>
+              <span class="window-dot dot-max"></span>
+            </div>
+            <div class="window-title">snapsync Booth</div>
+            <div style="width: 52px;"></div>
+          </div>
+
+          <!-- Booth Screen Viewport -->
+          <div class="booth-viewport" id="boothViewport">
+
+            <!-- State 1: Standby Screen (Matches BoothApp.ts .booth-landing with actual messages) -->
+            <div class="booth-landing-state" id="landingState">
+              <h1 class="sim-landing-brand" id="simStandbyMessage">Ready to strike a pose!</h1>
+              <p class="sim-landing-subtitle" id="simEventSubtitle">Photo Booth</p>
+              
+              <button class="sim-start-btn" onclick="triggerStartSession()">Start</button>
+              
+              <button class="sim-past-sessions-btn" onclick="openPastSessionsAlert()">
+                Past Sessions
+              </button>
+
+              <button class="sim-settings-link" onclick="openSettingsAlert()">
+                Settings
+              </button>
+
+              <div class="sim-landing-footer">snapsync</div>
+            </div>
+
+            <!-- State 2: Capture Viewfinder Screen -->
+            <div class="booth-capture-state" id="captureState">
+              <div class="camera-live-feed">
+                <!-- Clean silhouette of attendee posing -->
+                <svg class="subject-silhouette" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                </svg>
+              </div>
+
+              <!-- Shutter Flash Overlay -->
+              <div class="booth-flash-layer" id="flashLayer"></div>
+
+              <!-- Big Bold Countdown Number -->
+              <div class="capture-countdown-num" id="countdownEl">3</div>
+
+              <!-- Capture Progress Indicator -->
+              <div class="sim-capture-progress">
+                <span class="sim-progress-text" id="progressShotText">Shot 1 of 3</span>
+                <div class="sim-progress-bars">
+                  <div class="sim-progress-bar-slot filled" id="bar1"></div>
+                  <div class="sim-progress-bar-slot" id="bar2"></div>
+                  <div class="sim-progress-bar-slot" id="bar3"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- State 3: Post-Capture Review Screen (Exact match to PhotoPreview.ts) -->
+            <div class="ui-photo-preview-overlay" id="reviewState">
+              <h2 class="ui-photo-preview-title">Your Shots</h2>
+
+              <div class="event-framed-strip" id="renderedStrip">
+                <div class="frame-branding-header" id="frameHeader">
+                  <div class="frame-brand-title" id="frameTitleText">TECH SUMMIT 2026</div>
+                  <div class="frame-brand-tagline" id="frameTaglineText">SAN FRANCISCO, CA</div>
+                </div>
+
+                <div class="frame-photo-slot">
+                  <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+                </div>
+                <div class="frame-photo-slot">
+                  <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+                </div>
+                <div class="frame-photo-slot">
+                  <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+                </div>
+
+                <div class="frame-branding-footer">
+                  <span>#TECHSUMMIT26</span>
+                  <span id="frameFooterDate">2026.09.19</span>
+                </div>
+              </div>
+
+              <!-- Action Buttons matching PhotoPreview.ts -->
+              <div class="ui-photo-preview-actions">
+                <button class="ui-photo-btn-retake" onclick="resetToLanding()">Retake</button>
+                <button class="ui-photo-btn-confirm" onclick="resetToLanding()">Looks Great!</button>
+                <button class="ui-photo-btn-share" onclick="showQrModal()">Share QR</button>
+              </div>
+            </div>
+
+            <!-- State 4: Modal QR Overlay (Exact match to PhotoPreview.ts showQR) -->
+            <div class="ui-qr-overlay" id="qrModal" onclick="handleQrOverlayClick(event)">
+              <div class="ui-qr-box">
+                <h3 class="ui-qr-title">Scan to get shots</h3>
+                <div class="ui-qr-img">
+                  <!-- Crisp SVG QR Code -->
+                  <svg viewBox="0 0 29 29" shape-rendering="crispEdges" width="100%" height="100%">
+                    <path fill="#ffffff" d="M0 0h29v29H0z"/>
+                    <path fill="#000000" d="M0 0h7v7H0zm2 2v3h3V2zm7 0h2v1H9zm3 0h1v1h-1zm2 0h1v1h-1zm2 0h2v2h-2zm4 0h7v7h-7zm2 2v3h3V4zM7 9h1v1H7zm3 0h1v2h-1zm4 0h3v1h-3zm4 0h2v1h-2zm-9 2h2v1H9zm5 0h1v1h-1zm2 0h1v2h-1zm-6 2h1v1h-1zm3 0h1v2h-1zm3 0h2v1h-2zm3 0h1v1h-1zm-8 2h1v1h-1zm5 0h1v1h-1zm3 0h1v1h-1zm-9 2h1v1H8zm2 0h2v1h-2zm3 0h1v1h-1zm4 0h1v2h-1zm-9 2h1v2H8zm2 0h2v1h-2zm5 0h1v1h-1zm3 0h2v1h-2zM0 22h7v7H0zm2 2v3h3v-3zm7 0h1v2H9zm3 0h2v1h-2zm4 0h2v1h-2zm3 0h1v1h-1zm3 0h1v2h-1zm-5 2h1v1h-1zm3 0h1v2h-1zm3 0h2v1h-2z"/>
+                  </svg>
+                </div>
+                <p class="ui-qr-link">https://snapsync.kmeng.com/share/sess_9281a</p>
+                <button class="ui-qr-close-btn" onclick="closeQrModal()">Close</button>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Interactive Simulator Settings Tray -->
+          <div class="simulator-config-tray">
+            <div class="tray-group">
+              <span class="tray-label">Camera:</span>
+              <div class="tray-btn-group">
+                <button class="tray-pill active" id="btnCamDslr" onclick="setSimCamera('dslr')">Canon DSLR</button>
+                <button class="tray-pill" id="btnCamWebcam" onclick="setSimCamera('webcam')">USB Webcam</button>
+              </div>
+            </div>
+
+            <div class="tray-group">
+              <span class="tray-label">Frame Theme:</span>
+              <div class="tray-btn-group">
+                <button class="tray-pill active" id="btnThemeTech" onclick="applySimTheme('tech')">Tech Summit</button>
+                <button class="tray-pill" id="btnThemeGala" onclick="applySimTheme('gala')">Annual Gala</button>
+                <button class="tray-pill" id="btnThemeBrand" onclick="applySimTheme('brand')">Brand Launch</button>
+              </div>
+            </div>
+
+            <div class="tray-group">
+              <button class="sim-secondary-btn" style="padding: 0.25rem 0.75rem; font-size: 0.75rem;" onclick="resetToLanding()">
+                Reset Simulator
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Features Section -->
+    <section class="features-section" id="features">
+      <div class="container">
+        <div class="section-header">
+          <div class="section-kicker">Engineered For Events</div>
+          <h2 class="section-title">Everything Built For Live Engagements</h2>
+          <p class="section-desc">Reliable photobooth software that puts your branding front and center.</p>
+        </div>
+
+        <div class="features-grid">
+          <div class="feature-card">
+            <div class="feature-icon">
+              <svg class="lucide lucide-camera" viewBox="0 0 24 24">
+                <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/>
+                <circle cx="12" cy="13" r="3"/>
+              </svg>
+            </div>
+            <h3>DSLR or Webcam Ready</h3>
+            <p>Connect tethered Canon, Sony, or Nikon cameras via USB for studio clarity, or use any standard webcam for rapid, zero-friction deployments.</p>
+          </div>
+
+          <div class="feature-card">
+            <div class="feature-icon">
+              <svg class="lucide lucide-layers" viewBox="0 0 24 24">
+                <path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.9a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/>
+                <path d="m22 12.5-9.17 4.16a2 2 0 0 1-1.66 0L2 12.5"/>
+                <path d="m22 17.5-9.17 4.16a2 2 0 0 1-1.66 0L2 17.5"/>
+              </svg>
+            </div>
+            <h3>Custom Branding Overlays</h3>
+            <p>Easily apply custom PNG frame graphics, sponsor logos, event hashtags, and date banners. Turn every photo into a branded digital keepsake.</p>
+          </div>
+
+          <div class="feature-card">
+            <div class="feature-icon">
+              <svg class="lucide lucide-qr-code" viewBox="0 0 24 24">
+                <rect width="5" height="5" x="3" y="3" rx="1"/>
+                <rect width="5" height="5" x="16" y="3" rx="1"/>
+                <rect width="5" height="5" x="3" y="16" rx="1"/>
+                <path d="M21 16h-3a2 2 0 0 0-2 2v3"/>
+                <path d="M21 21v.01"/>
+                <path d="M12 7v3a2 2 0 0 1-2 2H7"/>
+                <path d="M3 12h.01"/>
+                <path d="M12 3h.01"/>
+                <path d="M12 16v.01"/>
+                <path d="M16 12h1"/>
+                <path d="M21 12v.01"/>
+                <path d="M12 21v-1"/>
+              </svg>
+            </div>
+            <h3>Instant QR Code Delivery</h3>
+            <p>Attendees scan a clean QR code on the booth display right after posing to immediately view and download their high-resolution photos.</p>
+          </div>
+
+          <div class="feature-card">
+            <div class="feature-icon">
+              <svg class="lucide lucide-shield-check" viewBox="0 0 24 24">
+                <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/>
+                <path d="m9 12 2 2 4-4"/>
+              </svg>
+            </div>
+            <h3>Self-Hosted & Private</h3>
+            <p>No subscription lock-in, no per-event fees, and no third-party watermarks. All media is hosted locally and remains under your direct control.</p>
+          </div>
+
+          <div class="feature-card">
+            <div class="feature-icon">
+              <svg class="lucide lucide-layout-dashboard" viewBox="0 0 24 24">
+                <rect width="7" height="9" x="3" y="3" rx="1"/>
+                <rect width="7" height="5" x="14" y="3" rx="1"/>
+                <rect width="7" height="9" x="14" y="12" rx="1"/>
+                <rect width="7" height="5" x="3" y="16" rx="1"/>
+              </svg>
+            </div>
+            <h3>Operator Hub</h3>
+            <p>Manage photo sessions, preview live captures, monitor printer queues, and export high-res archives from any device on your local network.</p>
+          </div>
+
+          <div class="feature-card">
+            <div class="feature-icon">
+              <svg class="lucide lucide-wifi-off" viewBox="0 0 24 24">
+                <line x1="2" x2="22" y1="2" y2="22"/>
+                <path d="M8.5 16.5a5 5 0 0 1 7 0"/>
+                <path d="M2 8.82a15 15 0 0 1 4.17-2.65"/>
+                <path d="M10.66 5c4.01-.36 8.14.9 11.34 3.82"/>
+                <path d="M16.85 11.25a10 10 0 0 1 2.22 1.68"/>
+                <path d="M5 13a10 10 0 0 1 5.24-2.78"/>
+                <line x1="12" x2="12.01" y1="20" y2="20"/>
+              </svg>
+            </div>
+            <h3>Offline Resilient</h3>
+            <p>Unreliable venue Wi-Fi won't interrupt your event. Captures are safely stored in a local offline queue and sync smoothly whenever ready.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Hardware Compatibility -->
+    <section class="hardware-section" id="hardware">
+      <div class="container">
+        <div class="section-header">
+          <div class="section-kicker">Hardware Versatility</div>
+          <h2 class="section-title">Choose Your Capture Setup</h2>
+          <p class="section-desc">SnapSync adapts to standard USB webcams as well as professional tethered DSLRs.</p>
+        </div>
+
+        <div class="hardware-cards">
+          <div class="hardware-card">
+            <div class="hardware-type">Studio Setup</div>
+            <h3>DSLR & Mirrorless Tethering</h3>
+            <p>Direct USB control using gphoto2 on macOS and DigiCamControl on Windows.</p>
+            <ul class="hardware-list">
+              <li>
+                <svg class="lucide lucide-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>
+                Canon EOS (80D, 5D, R-series, Rebel series)
+              </li>
+              <li>
+                <svg class="lucide lucide-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>
+                Sony Alpha (A7 III, A7 IV, A6400)
+              </li>
+              <li>
+                <svg class="lucide lucide-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>
+                Optical live view and external strobe flash sync
+              </li>
+            </ul>
+          </div>
+
+          <div class="hardware-card">
+            <div class="hardware-type">Plug & Play</div>
+            <h3>USB & Built-in Webcams</h3>
+            <p>Instant zero-driver setup using standard browser and system media APIs.</p>
+            <ul class="hardware-list">
+              <li>
+                <svg class="lucide lucide-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>
+                Logitech Brio, C920, OBSBOT, and standard USB webcams
+              </li>
+              <li>
+                <svg class="lucide lucide-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>
+                MacBook & laptop integrated cameras
+              </li>
+              <li>
+                <svg class="lucide lucide-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>
+                Ideal for quick pop-ups, hackathons, and small venues
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Workflow Steps -->
+    <section class="steps-section">
+      <div class="container">
+        <div class="section-header">
+          <div class="section-kicker">Quick Start</div>
+          <h2 class="section-title">How It Works</h2>
+          <p class="section-desc">A simple, reliable workflow from connection to guest sharing.</p>
+        </div>
+
+        <div class="steps-grid">
+          <div class="step-item">
+            <div class="step-num">01</div>
+            <h4>Connect Camera</h4>
+            <p>Connect your camera via USB. Launch the client application and choose your camera mode.</p>
+          </div>
+
+          <div class="step-item">
+            <div class="step-num">02</div>
+            <h4>Load Custom Branding Overlays</h4>
+            <p>Upload your event frames and logos in the operator hub to brand every photo capture.</p>
+          </div>
+
+          <div class="step-item">
+            <div class="step-num">03</div>
+            <h4>Capture & QR Share</h4>
+            <p>Guests tap Start, pose for the countdown, and scan the on-screen QR code to download their photos.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Creator Contact & Consultation CTA -->
+    <section class="cta-section" id="contact">
+      <div class="container">
+        <div class="cta-card">
+          <h2 class="cta-title">Planning an Event?</h2>
+          <p class="cta-desc">
+            Need custom branding overlays, multi-booth synchronization, hardware advice, or event deployment support? Feel free to reach out directly.
+          </p>
+
+          <div class="contact-action-bar">
+            <a href="mailto:kmeng.work@gmail.com?subject=SnapSync%20Event%20Inquiry" class="btn btn-primary">
+              <svg class="lucide lucide-mail" viewBox="0 0 24 24">
+                <rect width="20" height="16" x="2" y="4" rx="2"/>
+                <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+              </svg>
+              Contact Me
+            </a>
+
+            <div class="email-display-pill">
+              <span>kmeng.work@gmail.com</span>
+              <button class="copy-btn" onclick="copyEmail()" aria-label="Copy email" title="Copy email">
+                <svg class="lucide lucide-copy" viewBox="0 0 24 24">
+                  <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
+                  <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="copy-toast" id="copyToast">Email copied to clipboard</div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="container">
+      <p>
+        Snapsync. An app by <a href="mailto:kmeng.work@gmail.com">kahmeng</a>
+      </p>
+    </div>
+  </footer>
+
+  <!-- Simulator Logic -->
+  <script>
+    const themes = {
+      tech: {
+        title: 'TECH SUMMIT 2026',
+        location: 'SAN FRANCISCO, CA',
+        tag: '#TECHSUMMIT26',
+        bg: '#ffffff',
+        text: '#111111',
+        border: '#111111'
+      },
+      gala: {
+        title: 'ANNUAL CHARITY GALA',
+        location: 'NEW YORK, NY',
+        tag: '#GALA2026',
+        bg: '#18181b',
+        text: '#f4f4f5',
+        border: '#fbbf24'
+      },
+      brand: {
+        title: 'NEO LAUNCH 2026',
+        location: 'AUSTIN, TX',
+        tag: '#NEOLAUNCH',
+        bg: '#09090b',
+        text: '#ffffff',
+        border: '#3b82f6'
+      }
+    };
+
+    const actualStandbyMessages = [
+      "Ready to strike a pose!",
+      "Grab a prop and smile!",
+      "Make a memory!",
+      "Show your best smile!",
+      "Tap Start to begin!"
+    ];
+
+    let currentMsgIndex = 0;
+    let currentThemeKey = 'tech';
+    let simCountdownInterval = null;
+
+    function cycleStandbyMessage() {
+      currentMsgIndex = (currentMsgIndex + 1) % actualStandbyMessages.length;
+      document.getElementById('simStandbyMessage').innerText = actualStandbyMessages[currentMsgIndex];
+    }
+
+    function applySimTheme(key) {
+      const theme = themes[key];
+      if (!theme) return;
+      currentThemeKey = key;
+
+      document.querySelectorAll('#btnThemeTech, #btnThemeGala, #btnThemeBrand').forEach(b => b.classList.remove('active'));
+      const activeBtn = document.getElementById('btnTheme' + key.charAt(0).toUpperCase() + key.slice(1));
+      if (activeBtn) activeBtn.classList.add('active');
+
+      // Update frame layout
+      const strip = document.getElementById('renderedStrip');
+      strip.style.backgroundColor = theme.bg;
+      strip.style.color = theme.text;
+      
+      const header = document.getElementById('frameHeader');
+      header.style.borderBottomColor = theme.border;
+
+      document.getElementById('frameTitleText').innerText = theme.title;
+      document.getElementById('frameTaglineText').innerText = theme.location;
+      document.querySelector('.frame-branding-footer span:first-child').innerText = theme.tag;
+    }
+
+    function setSimCamera(type) {
+      const btnDslr = document.getElementById('btnCamDslr');
+      const btnWebcam = document.getElementById('btnCamWebcam');
+
+      if (type === 'dslr') {
+        btnDslr.classList.add('active');
+        btnWebcam.classList.remove('active');
+      } else {
+        btnWebcam.classList.add('active');
+        btnDslr.classList.remove('active');
+      }
+    }
+
+    function triggerStartSession() {
+      const landing = document.getElementById('landingState');
+      const capture = document.getElementById('captureState');
+      const review = document.getElementById('reviewState');
+      const countdownEl = document.getElementById('countdownEl');
+      const flash = document.getElementById('flashLayer');
+
+      landing.style.display = 'none';
+      review.style.display = 'none';
+      capture.style.display = 'flex';
+
+      let count = 3;
+      countdownEl.innerText = count;
+
+      if (simCountdownInterval) clearInterval(simCountdownInterval);
+
+      simCountdownInterval = setInterval(() => {
+        count--;
+        if (count > 0) {
+          countdownEl.innerText = count;
+        } else {
+          clearInterval(simCountdownInterval);
+          countdownEl.innerText = '';
+
+          // Trigger flash
+          flash.classList.add('booth-flash-active');
+          setTimeout(() => {
+            flash.classList.remove('booth-flash-active');
+            // Show review state with direct QR code
+            capture.style.display = 'none';
+            review.style.display = 'flex';
+          }, 350);
+        }
+      }, 750);
+    }
+
+    function showQrModal() {
+      document.getElementById('qrModal').style.display = 'flex';
+    }
+
+    function closeQrModal() {
+      document.getElementById('qrModal').style.display = 'none';
+    }
+
+    function handleQrOverlayClick(e) {
+      if (e.target.id === 'qrModal') {
+        closeQrModal();
+      }
+    }
+
+    function openPastSessionsAlert() {
+      alert('Past Sessions viewer: In the client app, this opens the local gallery of previous captures.');
+    }
+
+    function openSettingsAlert() {
+      alert('Settings panel: In the client app, this allows configuring camera tethering, countdown, and event links.');
+    }
+
+    function resetToLanding() {
+      if (simCountdownInterval) clearInterval(simCountdownInterval);
+      closeQrModal();
+      document.getElementById('captureState').style.display = 'none';
+      document.getElementById('reviewState').style.display = 'none';
+      document.getElementById('landingState').style.display = 'flex';
+    }
+
+    function copyEmail() {
+      const email = 'kmeng.work@gmail.com';
+      navigator.clipboard.writeText(email).then(() => {
+        const toast = document.getElementById('copyToast');
+        toast.classList.add('visible');
+        setTimeout(() => {
+          toast.classList.remove('visible');
+        }, 2200);
+      }).catch(() => {
+        window.location.href = 'mailto:' + email;
+      });
+    }
+  </script>
+</body>
+</html>
