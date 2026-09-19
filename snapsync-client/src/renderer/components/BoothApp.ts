@@ -71,6 +71,7 @@ export class BoothApp {
   private isCapturing = false
   private landingBrandEl: HTMLHeadingElement | null = null
   private landingSubtitleEl: HTMLParagraphElement | null = null
+  private landingFooterEl: HTMLDivElement | null = null
   private isLive = false
   private isTransitioning = false
   private isPaused = false
@@ -188,13 +189,17 @@ export class BoothApp {
   // ---
 
   private updateLandingText() {
+    const msg = this.pickMessage('homepage')
     if (this.landingBrandEl) {
-      this.landingBrandEl.textContent = this.pickMessage('homepage') || 'snapsync'
+      this.landingBrandEl.textContent = msg || 'snapsync'
       this.landingBrandEl.classList.add('loaded')
     }
     if (this.landingSubtitleEl) {
       this.landingSubtitleEl.textContent = (this.settingsData as any)?.eventName || 'Photo Booth'
       this.landingSubtitleEl.classList.add('loaded')
+    }
+    if (this.landingFooterEl) {
+      this.landingFooterEl.style.display = msg ? 'block' : 'none'
     }
   }
 
@@ -362,18 +367,15 @@ export class BoothApp {
     this.landingSubtitleEl.className = 'booth-landing-subtitle'
     this.landingEl.appendChild(this.landingSubtitleEl)
 
-    const footer = document.createElement('div')
-    footer.style.position = 'absolute'
-    footer.style.bottom = '1.5rem'
-    footer.style.width = '100%'
-    footer.style.textAlign = 'center'
-    footer.style.fontSize = '0.85rem'
-    footer.style.color = '#555'
-    footer.style.fontWeight = '500'
-    footer.style.letterSpacing = '0.05em'
-    footer.style.fontFamily = 'inherit';
-    footer.textContent = 'snapsync'
-    this.landingEl.appendChild(footer)
+    this.landingFooterEl = document.createElement('div')
+    this.landingFooterEl.className = 'logo-text'
+    this.landingFooterEl.style.position = 'absolute'
+    this.landingFooterEl.style.bottom = '1.5rem'
+    this.landingFooterEl.style.width = '100%'
+    this.landingFooterEl.style.textAlign = 'center'
+    this.landingFooterEl.style.display = 'none'
+    this.landingFooterEl.textContent = 'snapsync'
+    this.landingEl.appendChild(this.landingFooterEl)
 
     this.startBtn = document.createElement('button')
     this.startBtn.textContent = 'Start'
@@ -425,20 +427,6 @@ export class BoothApp {
     settingsLink.addEventListener('mouseleave', () => { settingsLink.style.color = '#444' })
     settingsLink.addEventListener('click', () => this.openSettings('full'))
     this.landingEl.appendChild(settingsLink)
-
-    // Logs as hyperlink text
-    const logsLink = document.createElement('button')
-    logsLink.textContent = 'Logs'
-    Object.assign(logsLink.style, {
-      background: 'none', border: 'none', cursor: 'pointer',
-      fontSize: '0.8125rem', color: '#444',
-      padding: '0.25rem 0.5rem', textDecoration: 'none',
-      transition: 'color 150ms',
-    })
-    logsLink.addEventListener('mouseenter', () => { logsLink.style.color = '#888' })
-    logsLink.addEventListener('mouseleave', () => { logsLink.style.color = '#444' })
-    logsLink.addEventListener('click', () => this.settings.showLogs())
-    this.landingEl.appendChild(logsLink)
 
     // ------------------------------------------------------------------
     // Offline confirm modal

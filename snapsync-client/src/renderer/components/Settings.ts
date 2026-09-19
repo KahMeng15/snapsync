@@ -126,6 +126,10 @@ export class Settings {
   private panel!: HTMLDivElement
   private grid!: HTMLDivElement
   private col2!: HTMLDivElement
+  private devBtn!: HTMLButtonElement
+  private headerLogsBtn!: HTMLButtonElement
+  private saveBtn!: HTMLButtonElement
+  private cardLogsRow!: HTMLDivElement
   private dslrSliderRefs: Array<{ input: HTMLInputElement; display: HTMLSpanElement; choices: string[] }> = []
   private dslrModel = ''
   private mjpegBtn!: HTMLButtonElement
@@ -225,39 +229,66 @@ export class Settings {
     title.style.cssText = 'font-size: 1.25rem; font-weight: 700; margin: 0; flex: 1;'
     header.appendChild(title)
 
-    const saveBtn = document.createElement('button')
-    saveBtn.textContent = 'Save'
-    saveBtn.style.cssText = `
+    this.saveBtn = document.createElement('button')
+    this.saveBtn.textContent = 'Save'
+    this.saveBtn.style.cssText = `
       padding: 0.5rem 1.25rem;
       background: #fff; color: #000; border: none; border-radius: 8px;
       font-size: 0.875rem; font-weight: 600; cursor: pointer;
+      flex-shrink: 0; margin-left: auto;
     `
-    saveBtn.addEventListener('click', () => {
+    this.saveBtn.addEventListener('click', () => {
       this.save()
       this.dirty = false
       this.hide()
     })
-    header.appendChild(saveBtn)
+    header.appendChild(this.saveBtn)
 
-    const logsBtn = document.createElement('button')
-    logsBtn.textContent = 'App Logs'
-    logsBtn.style.cssText = `
+    this.headerLogsBtn = document.createElement('button')
+    this.headerLogsBtn.textContent = 'App Logs'
+    this.headerLogsBtn.style.cssText = `
       padding: 0.5rem 1rem;
       background: transparent; color: #aaa; border: 1px solid #333; border-radius: 8px;
-      font-size: 0.8125rem; font-weight: 500; cursor: pointer; margin-right: 0.5rem;
+      font-size: 0.8125rem; font-weight: 500; cursor: pointer; margin-right: 0.5rem; flex-shrink: 0;
     `
-    logsBtn.addEventListener('click', () => this.showLogs())
-    header.insertBefore(logsBtn, saveBtn)
+    this.headerLogsBtn.addEventListener('click', () => this.showLogs())
+    header.insertBefore(this.headerLogsBtn, this.saveBtn)
 
-    const devBtn = document.createElement('button')
-    devBtn.textContent = 'Advanced Dev Options'
-    devBtn.style.cssText = `
+    this.devBtn = document.createElement('button')
+    this.devBtn.textContent = 'Advanced Dev Options'
+    this.devBtn.style.cssText = `
       padding: 0.5rem 1rem;
       background: transparent; color: #888; border: 1px solid #333; border-radius: 8px;
-      font-size: 0.8125rem; font-weight: 500; cursor: pointer; margin-right: 0.5rem;
+      font-size: 0.8125rem; font-weight: 500; cursor: pointer; margin-right: 0.5rem; flex-shrink: 0;
     `
-    devBtn.addEventListener('click', () => this.promptForDevOptions())
-    header.insertBefore(devBtn, saveBtn)
+    this.devBtn.addEventListener('click', () => this.promptForDevOptions())
+    header.insertBefore(this.devBtn, this.saveBtn)
+
+    this.cardLogsRow = document.createElement('div')
+    this.cardLogsRow.style.cssText = 'margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid #2a2a2a; display: none;'
+    const cardLogsBtn = document.createElement('button')
+    cardLogsBtn.style.cssText = `
+      width: 100%; padding: 0.625rem 1rem;
+      background: transparent; color: #aaa;
+      border: 1px solid #333; border-radius: 8px;
+      font-size: 0.8125rem; font-weight: 500; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+      transition: all 150ms ease;
+    `
+    cardLogsBtn.innerHTML = `
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+      View App Logs
+    `
+    cardLogsBtn.addEventListener('mouseenter', () => {
+      cardLogsBtn.style.borderColor = '#555'
+      cardLogsBtn.style.color = '#fff'
+    })
+    cardLogsBtn.addEventListener('mouseleave', () => {
+      cardLogsBtn.style.borderColor = '#333'
+      cardLogsBtn.style.color = '#aaa'
+    })
+    cardLogsBtn.addEventListener('click', () => this.showLogs())
+    this.cardLogsRow.appendChild(cardLogsBtn)
 
 
     this.panel.appendChild(header)
@@ -1668,7 +1699,11 @@ export class Settings {
           overflow-y: auto; max-height: 80vh;
         `
         this.grid.style.display = 'none'
+        this.devBtn.style.display = 'none'
+        this.headerLogsBtn.style.display = 'none'
         this.panel.appendChild(this.dslrExposureSection)
+        this.panel.appendChild(this.cardLogsRow)
+        this.cardLogsRow.style.display = 'block'
       } else {
         this.overlay.style.cssText = `
           position: absolute; inset: 0; background: #0f0f0f;
@@ -1681,6 +1716,9 @@ export class Settings {
           flex: 1; overflow-y: auto;
         `
         this.grid.style.display = 'grid'
+        this.devBtn.style.display = 'inline-block'
+        this.headerLogsBtn.style.display = 'inline-block'
+        this.cardLogsRow.style.display = 'none'
         this.col2.appendChild(this.dslrExposureSection)
       }
     }
