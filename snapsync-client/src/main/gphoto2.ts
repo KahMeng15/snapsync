@@ -1726,26 +1726,13 @@ export class DslrManager {
           await new Promise((r) => setTimeout(r, 300))
         }
 
-        let args: string[]
-        if (this.cameraModel.toLowerCase().includes('sony') || this.cameraModel.toLowerCase().includes('alpha')) {
-          // Sony PTP capture: --trigger-capture sends the shutter trigger and
-          // --wait-event-and-download catches the file download event and transfers it.
-          args = [
-            '--trigger-capture',
-            '--wait-event-and-download=5s',
-            `--filename=${path.join(downloadDir, filenameTemplate)}`,
-            '--force-overwrite',
-            ...portArgs,
-          ]
-        } else {
-          args = [
-            '--capture-image-and-download',
-            '--keep',
-            `--filename=${path.join(downloadDir, filenameTemplate)}`,
-            '--force-overwrite',
-            ...portArgs,
-          ]
-        }
+        const args: string[] = [
+          '--capture-image-and-download',
+          '--keep',
+          `--filename=${path.join(downloadDir, filenameTemplate)}`,
+          '--force-overwrite',
+          ...portArgs,
+        ]
 
         log.info(`[DslrManager] ⏱ gphoto2 capture args: ${args.join(' ')}`)
         log.info(`[DslrManager] ⏱ SHUTTER COMMAND launching at t+${Date.now() - tCapStart} ms from captureGphoto2() entry`)
@@ -1780,25 +1767,6 @@ export class DslrManager {
         proc.on('close', (code: number | null) => {
           clearTimeout(captureTimeout)
           log.info(`[DslrManager] ⏱ gphoto2 capture command exited code=${code} after ${Date.now() - tShutter} ms (total captureGphoto2: ${Date.now() - tCapStart} ms)`)
-
-          const isSony = this.cameraModel.toLowerCase().includes('sony') || this.cameraModel.toLowerCase().includes('alpha')
-
-          // Sony post-capture cleanup (fire-and-forget, non-blocking):
-          //  1. Send capture=0 as a SEPARATE gphoto2 call to release the shutter.
-          //     This must not be chained in the capture args — see above.
-          //  2. Restore the original drive mode if we changed it to Single Shot.
-          if (isSony) {
-            const sonyCleanup = async () => {
-              // 1. Release shutter (capture=0)
-              const resetRes = await this.execGphoto2(['--set-config', '/main/actions/capture=0', ...portArgs], 3000)
-              if (resetRes.code === 0) {
-                log.ok('[DslrManager] Sony capture=0 sent — shutter released')
-              } else {
-                log.warn(`[DslrManager] Sony capture=0 failed (non-fatal): ${resetRes.stderr.trim().slice(0, 80)}`)
-              }
-            }
-            sonyCleanup().catch(() => {})
-          }
 
           const addReturned = (fp: string) => { this._returnedFiles.add(fp); return fp }
 
