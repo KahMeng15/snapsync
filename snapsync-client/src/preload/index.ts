@@ -90,6 +90,7 @@ contextBridge.exposeInMainWorld('snapsync', {
     serverUrl?: string
     otp?: string
     cameraMode?: 'webcam' | 'dslr'
+    screenMode?: 'fullscreen' | 'windowed-fullscreen' | 'windowed'
     liveviewMode?: 'mjpeg' | 'polling'
     autoPreview?: boolean
     liveviewRetryAttempts?: number

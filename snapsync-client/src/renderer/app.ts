@@ -78,6 +78,7 @@ declare global {
         audioDeviceId?: string
         otp?: string
         cameraMode?: 'webcam' | 'dslr'
+        screenMode?: 'fullscreen' | 'windowed-fullscreen' | 'windowed'
         dslrFocusMode?: string
         dslrWhiteBalance?: string
         dslrWhiteBalanceKelvin?: number
@@ -92,6 +93,7 @@ declare global {
         audioDeviceId?: string
         otp?: string
         cameraMode?: 'webcam' | 'dslr'
+        screenMode?: 'fullscreen' | 'windowed-fullscreen' | 'windowed'
         dslrFocusMode?: string
         dslrWhiteBalance?: string
         dslrWhiteBalanceKelvin?: number

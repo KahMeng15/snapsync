@@ -1,7 +1,7 @@
 import { app, BrowserWindow, ipcMain, screen, session, systemPreferences } from 'electron'
 import path from 'path'
 import fs from 'fs'
-import { initIpcHandlers } from './ipc'
+import { initIpcHandlers, applyScreenMode } from './ipc'
 import { OfflineQueue } from './offlineQueue'
 import { DslrManager, restorePtpDaemons } from './gphoto2'
 
@@ -55,10 +55,16 @@ app.on('ready', async () => {
 
   const { width: screenWidth, height: screenHeight } = screen.getPrimaryDisplay().workAreaSize
 
+  let initialScreenMode: 'fullscreen' | 'windowed-fullscreen' | 'windowed' = 'windowed'
+  try {
+    const s = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf-8'))
+    if (s.screenMode) initialScreenMode = s.screenMode
+  } catch {}
+
   mainWindow = new BrowserWindow({
     width: Math.min(screenWidth, 1920),
     height: Math.min(screenHeight, 1080),
-    fullscreen: false,
+    fullscreen: initialScreenMode === 'fullscreen',
     frame: true,
     kiosk: false,
     webPreferences: {
@@ -80,6 +86,14 @@ app.on('ready', async () => {
   dslrManager.setWindow(mainWindow!)
 
   initIpcHandlers(mainWindow!, dslrManager, offlineQueue, activeServerUrl, setActiveServerUrl)
+
+  if (initialScreenMode === 'windowed-fullscreen') {
+    mainWindow.once('ready-to-show', () => {
+      if (mainWindow) applyScreenMode(mainWindow, 'windowed-fullscreen')
+    })
+    // Also trigger in case ready-to-show already fired
+    applyScreenMode(mainWindow, 'windowed-fullscreen')
+  }
 
   await dslrManager.detect()
 

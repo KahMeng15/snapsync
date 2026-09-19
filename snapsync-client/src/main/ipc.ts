@@ -42,6 +42,7 @@ const DEFAULT_SETTINGS = {
   liveviewRetryAttempts: 1,
   shutterOffsetDelay: 0,
   dslrWhiteBalanceKelvin: 5200,
+  screenMode: 'windowed' as 'fullscreen' | 'windowed-fullscreen' | 'windowed',
   
   // Advanced Dev Settings (Network Simulation)
   devSimulationEnabled: false,
@@ -603,6 +604,7 @@ export function initIpcHandlers(
     serverUrl?: string
     otp?: string
     cameraMode?: 'webcam' | 'dslr'
+    screenMode?: 'fullscreen' | 'windowed-fullscreen' | 'windowed'
     dslrIso?: string
     dslrShutterSpeed?: string
     dslrAperture?: string
@@ -626,6 +628,9 @@ export function initIpcHandlers(
       const existing = getSettingsSync()
       const merged = { ...existing, ...settings }
       fs.writeFileSync(SETTINGS_FILE, JSON.stringify(merged, null, 2))
+      if (settings.screenMode && _mainWindow && !_mainWindow.isDestroyed()) {
+        await applyScreenMode(_mainWindow, settings.screenMode)
+      }
       const syncUrl = merged.serverUrl !== undefined ? merged.serverUrl : _serverUrl
       if (merged.serverUrl !== undefined && merged.serverUrl !== _serverUrl) {
         _serverUrl = merged.serverUrl
@@ -1017,17 +1022,62 @@ ipcMain.handle('persist-msg-seq-index', async (event, seqIndex) => {
   fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2))
 })
 
-ipcMain.handle('set-screen-mode', (event, mode: 'fullscreen' | 'windowed-fullscreen' | 'windowed') => {
-  if (!_mainWindow) return
-  if (mode === 'fullscreen') {
-    _mainWindow.setFullScreen(true)
-  } else if (mode === 'windowed-fullscreen') {
-    _mainWindow.setFullScreen(false)
-    _mainWindow.maximize()
-  } else {
-    _mainWindow.setFullScreen(false)
-    _mainWindow.unmaximize()
+export async function applyScreenMode(
+  win: BrowserWindow,
+  mode: 'fullscreen' | 'windowed-fullscreen' | 'windowed'
+) {
+  if (!win || win.isDestroyed()) return
+
+  const ensureExitFullScreen = async () => {
+    if (win.isFullScreen()) {
+      await new Promise<void>((resolve) => {
+        const timeout = setTimeout(resolve, 800)
+        win.once('leave-full-screen', () => {
+          clearTimeout(timeout)
+          resolve()
+        })
+        win.setFullScreen(false)
+      })
+    }
   }
+
+  if (mode === 'fullscreen') {
+    if (process.platform === 'darwin' && (win as any).isSimpleFullScreen?.()) {
+      (win as any).setSimpleFullScreen(false)
+    }
+    if (!win.isFullScreen()) {
+      win.setFullScreen(true)
+    }
+  } else if (mode === 'windowed-fullscreen') {
+    await ensureExitFullScreen()
+    if (process.platform === 'darwin') {
+      if ((win as any).setSimpleFullScreen) {
+        (win as any).setSimpleFullScreen(true)
+      } else {
+        win.maximize()
+      }
+    } else {
+      win.maximize()
+    }
+  } else {
+    // windowed
+    await ensureExitFullScreen()
+    if (process.platform === 'darwin' && (win as any).isSimpleFullScreen?.()) {
+      (win as any).setSimpleFullScreen(false)
+    }
+    if (win.isMaximized()) {
+      win.unmaximize()
+    }
+  }
+}
+
+ipcMain.handle('set-screen-mode', async (event, mode: 'fullscreen' | 'windowed-fullscreen' | 'windowed') => {
+  const settings = getSettingsSync()
+  settings.screenMode = mode
+  fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2))
+
+  if (!_mainWindow || _mainWindow.isDestroyed()) return
+  await applyScreenMode(_mainWindow, mode)
 })
 
 ipcMain.handle('close-app', () => {

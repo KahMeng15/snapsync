@@ -85,6 +85,7 @@ interface BoothSettings {
   devPacketLossPercent?: number
   devServerErrorPercent?: number
   devTimeoutPercent?: number
+  screenMode?: 'fullscreen' | 'windowed-fullscreen' | 'windowed'
 }
 
 interface MediaDeviceInfo {
@@ -98,7 +99,8 @@ export class Settings {
   public get isVisible() { return this.visible }
   private dirty = false
   private onChange: (settings: BoothSettings) => void
-  private settings: BoothSettings = { photoCount: 4, countdown: 5, captureInterval: 1, postCapturePreview: 2, serverUrl: '', cameraMode: 'webcam', dslrIso: 'auto', dslrShutterSpeed: 'auto', dslrAperture: 'auto', dslrFocusMode: 'auto', dslrWhiteBalance: 'auto', dslrWhiteBalanceKelvin: 5200, liveviewMode: 'mjpeg', autoPreview: false, liveviewRetryAttempts: 1, shutterOffsetDelay: 0, inactivityTimeout: 30 }
+  private settings: BoothSettings = { photoCount: 4, countdown: 5, captureInterval: 1, postCapturePreview: 2, serverUrl: '', cameraMode: 'webcam', dslrIso: 'auto', dslrShutterSpeed: 'auto', dslrAperture: 'auto', dslrFocusMode: 'auto', dslrWhiteBalance: 'auto', dslrWhiteBalanceKelvin: 5200, liveviewMode: 'mjpeg', autoPreview: false, liveviewRetryAttempts: 1, shutterOffsetDelay: 0, inactivityTimeout: 30, screenMode: 'windowed' }
+  private smSelect!: HTMLSelectElement
   private serverInput!: HTMLInputElement
   private cameraSelect!: HTMLSelectElement
   private audioSelect!: HTMLSelectElement
@@ -763,9 +765,9 @@ export class Settings {
     smLabel.style.cssText = 'font-size: 0.875rem; color: #ccc; font-weight: 500;'
     screenModeRow.appendChild(smLabel)
 
-    const smSelect = document.createElement('select')
-    smSelect.style.cssText = this.selectStyle()
-    smSelect.style.width = '140px'
+    this.smSelect = document.createElement('select')
+    this.smSelect.style.cssText = this.selectStyle()
+    this.smSelect.style.width = '140px'
     const opts = [
       { v: 'fullscreen', l: 'Fullscreen' },
       { v: 'windowed-fullscreen', l: 'Windowed FS' },
@@ -775,26 +777,19 @@ export class Settings {
       const opt = document.createElement('option')
       opt.value = o.v
       opt.textContent = o.l
-      smSelect.appendChild(opt)
+      this.smSelect.appendChild(opt)
     })
     
-    // We don't save screen mode in settings.json to avoid locking users out.
-    // We just apply it immediately. Or we can save it?
-    // "in the photobooth settings can you add a screen mode where the user can select..."
-    // Let's just apply it immediately and not persist it, or persist in localStorage.
-    const savedScreenMode = localStorage.getItem('screenMode') || 'windowed'
-    smSelect.value = savedScreenMode
-    if (window.snapsync?.setScreenMode) {
-      window.snapsync.setScreenMode(savedScreenMode as any)
-    }
+    this.smSelect.value = this.settings.screenMode || 'windowed'
 
-    smSelect.addEventListener('change', () => {
-      localStorage.setItem('screenMode', smSelect.value)
+    this.smSelect.addEventListener('change', () => {
+      this.settings.screenMode = this.smSelect.value as any
+      this.markDirty()
       if (window.snapsync?.setScreenMode) {
-        window.snapsync.setScreenMode(smSelect.value as any)
+        window.snapsync.setScreenMode(this.smSelect.value as any)
       }
     })
-    screenModeRow.appendChild(smSelect)
+    screenModeRow.appendChild(this.smSelect)
     section.appendChild(screenModeRow)
 
     // Inactivity Timeout
@@ -1532,6 +1527,10 @@ export class Settings {
       this.passcodeInput.value = this.settings.settingsPasscode || ''
     }
 
+    if (this.smSelect) {
+      this.smSelect.value = this.settings.screenMode || 'windowed'
+    }
+
     if (this.serverInput) {
       this.serverInput.value = this.settings.serverUrl || ''
     }
@@ -1624,6 +1623,12 @@ export class Settings {
 
   private save() {
     this.settings.serverUrl = this.serverInput.value.replace(/\/+$/, '')
+    if (this.smSelect) {
+      this.settings.screenMode = this.smSelect.value as any
+      if (this.settings.screenMode) {
+        window.snapsync?.setScreenMode(this.settings.screenMode)
+      }
+    }
     this.onChange(this.settings)
     window.snapsync?.saveSettings(this.settings)
     if (this.settings.otp) {
