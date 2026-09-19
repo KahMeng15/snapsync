@@ -121,7 +121,15 @@ export interface CaptureResult {
 
 /** Resolve a writable temp directory for downloaded frames / captures. */
 function tempDir(): string {
-  return app.getPath('temp')
+  try {
+    const dir = path.join(app.getPath('userData'), 'captures')
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true })
+    }
+    return dir
+  } catch {
+    return app.getPath('temp')
+  }
 }
 
 /**
@@ -490,7 +498,7 @@ class Gphoto2LiveviewStream {
       args.push('--capture-movie', '--stdout')
       if (this.port) args.push(`--port=${this.port}`)
 
-      this.currentProc = spawn(getGphoto2Bin(), args, { env: process.env })
+      this.currentProc = spawn(getGphoto2Bin(), args, { env: process.env, cwd: tempDir() })
 
       const timeout = setTimeout(() => {
         if (!resolved) {
@@ -668,7 +676,7 @@ class Gphoto2LiveviewStream {
   /** Run gphoto2 with args, collect text output. */
   private execGphoto2(args: string[], timeoutMs: number): Promise<{ code: number | null; stdout: string; stderr: string }> {
     return new Promise((resolve) => {
-      const proc = spawn(getGphoto2Bin(), args, { env: process.env })
+      const proc = spawn(getGphoto2Bin(), args, { env: process.env, cwd: tempDir() })
       let stdout = ''
       let stderr = ''
       proc.stdout?.on('data', (d: Buffer) => { stdout += d.toString() })
@@ -691,7 +699,7 @@ class Gphoto2LiveviewStream {
   /** Run gphoto2 with args, collect raw stdout buffer (for binary data like JPEG). */
   private execGphoto2Buffer(args: string[], timeoutMs: number): Promise<{ code: number | null; buffer: Buffer; stderr: string }> {
     return new Promise((resolve) => {
-      const proc = spawn(getGphoto2Bin(), args, { env: process.env })
+      const proc = spawn(getGphoto2Bin(), args, { env: process.env, cwd: tempDir() })
       const chunks: Buffer[] = []
       let stderr = ''
       proc.stdout?.on('data', (d: Buffer) => { chunks.push(d) })
@@ -723,7 +731,7 @@ class Gphoto2LiveviewStream {
    */
   private killPtpNow(onDone: () => void): void {
     const detect = () => {
-      const det = spawn(getGphoto2Bin(), ['--auto-detect'], { env: process.env })
+      const det = spawn(getGphoto2Bin(), ['--auto-detect'], { env: process.env, cwd: tempDir() })
       let out = ''
       det.stdout?.on('data', (d: Buffer) => { out += d.toString() })
       det.on('close', () => {
@@ -1288,7 +1296,7 @@ export class DslrManager {
     log.info(`[DslrManager] Running: ${bin} --auto-detect`)
     return new Promise((resolve) => {
       try {
-        const proc = spawn(bin, ['--auto-detect'], { env: process.env })
+        const proc = spawn(bin, ['--auto-detect'], { env: process.env, cwd: tempDir() })
         let output = ''
         let stderr = ''
 
@@ -1624,7 +1632,7 @@ export class DslrManager {
       const label = args.slice(0, 3).join(' ')  // e.g. '--set-config /main/...' (truncated)
       log.info(`[DslrManager] ⏱ exec START: gphoto2 ${label}${args.length > 3 ? ' …' : ''}`)
       const bin = getGphoto2Bin()
-      const proc = this._trackChild(spawn(bin, args, { env: process.env }))
+      const proc = this._trackChild(spawn(bin, args, { env: process.env, cwd: tempDir() }))
       let stdout = ''
       let stderr = ''
       proc.stdout?.on('data', (d: Buffer) => { stdout += d.toString() })
@@ -1701,6 +1709,10 @@ export class DslrManager {
         ? path.dirname(targetPath)
         : tempDir()
 
+      if (!fs.existsSync(downloadDir)) {
+        fs.mkdirSync(downloadDir, { recursive: true })
+      }
+
       const filenameTemplate = targetPath
         ? path.basename(targetPath)
         : `booth_%Y%m%d_%H%M%S.%C`
@@ -1728,7 +1740,6 @@ export class DslrManager {
 
         const args: string[] = [
           '--capture-image-and-download',
-          '--keep',
           `--filename=${path.join(downloadDir, filenameTemplate)}`,
           '--force-overwrite',
           ...portArgs,
@@ -1740,7 +1751,7 @@ export class DslrManager {
 
         const tShutter = Date.now()
         const bin = getGphoto2Bin()
-        const proc = spawn(bin, args, { env: process.env })
+        const proc = spawn(bin, args, { env: process.env, cwd: downloadDir })
         let stdout = ''
         let stderr = ''
 
@@ -1772,13 +1783,21 @@ export class DslrManager {
 
           const matches = [...stdout.matchAll(/Saving file as (.+\.(?:jpe?g|png|cr2|cr3|arw|nef|dng))/ig)]
           if (matches.length > 0) {
-            let bestMatch = matches.find((m) => /\.(jpe?g|png)$/i.test(m[1])) || matches[0]
+            // Pick the newest match from stdout
+            let bestMatch = matches[matches.length - 1]
             const filePath = bestMatch[1].trim()
             log.info(`[DslrManager] Found image path from stdout: ${filePath}`)
             if (fs.existsSync(filePath)) {
               resolve({ success: true, path: addReturned(filePath) })
               return
             }
+            try {
+              const real = fs.realpathSync(filePath)
+              if (fs.existsSync(real)) {
+                resolve({ success: true, path: addReturned(real) })
+                return
+              }
+            } catch {}
             log.warn(`[DslrManager] Path from stdout doesn't exist on disk: ${filePath}`)
           } else {
             log.warn('[DslrManager] Could not find "Saving file as ..." in stdout — falling back to dir scan')
@@ -1790,7 +1809,7 @@ export class DslrManager {
             const jpegs = fs.readdirSync(downloadDir)
               .filter((f) => /\.(jpe?g|png|cr2|cr3|arw|nef|dng)$/i.test(f))
               .map((f) => ({ f, p: path.join(downloadDir, f), t: fs.statSync(path.join(downloadDir, f)).mtimeMs }))
-              .filter((f) => f.t >= captureStartTime && !this._returnedFiles.has(f.p))
+              .filter((f) => f.t >= (captureStartTime - 5000) && !this._returnedFiles.has(f.p))
               .sort((a, b) => b.t - a.t)
 
             log.info(`[DslrManager] Dir scan found ${jpegs.length} new image(s) since capture start in ${downloadDir}`)
