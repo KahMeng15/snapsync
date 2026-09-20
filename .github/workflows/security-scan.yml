@@ -51,8 +51,7 @@ jobs:
       - uses: actions/checkout@v4
       
       - name: Build Docker Image
-        working-directory: ./snapsync-server
-        run: docker build -t snapsync-server:security-scan .
+        run: docker build -t snapsync-server:security-scan -f snapsync-server/Dockerfile .
         
       - name: Run Trivy Vulnerability Scanner
         uses: aquasecurity/trivy-action@master

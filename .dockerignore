@@ -1,11 +1,16 @@
 node_modules
+**/node_modules
 npm-debug.log
 dist
+**/dist
 .env
+.env.*
 .git
 *.md
 .DS_Store
 storage
+**/storage
+snapsync-client
 snapsync-server/node_modules
 snapsync-server/dist
 snapsync-share/node_modules
