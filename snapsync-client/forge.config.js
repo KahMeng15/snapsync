@@ -10,6 +10,9 @@ module.exports = {
     appBundleId: 'com.snapsync.booth',
     osxSign: {},
     osxNotarize: undefined,
+    extraResource: [
+      './digiCamControl'
+    ]
   },
   makers: [
     {

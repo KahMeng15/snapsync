@@ -37,3 +37,7 @@ shared/dist/
 
 # Accidental share storage
 snapsync-share/storage/
+
+# Windows Client Binaries
+snapsync-client/digiCamControl/
+snapsync-client/help.txt

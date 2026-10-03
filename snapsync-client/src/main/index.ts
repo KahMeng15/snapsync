@@ -5,6 +5,11 @@ import { initIpcHandlers, applyScreenMode } from './ipc'
 import { OfflineQueue } from './offlineQueue'
 import { DslrManager, restorePtpDaemons, fixSystemPath } from './gphoto2'
 
+// Disable hardware acceleration to prevent GPU crashes on some Windows/ARM64 setups
+app.disableHardwareAcceleration()
+app.commandLine.appendSwitch('disable-gpu')
+app.commandLine.appendSwitch('disable-gpu-compositing')
+
 // Ensure Homebrew and standard CLI paths are present in process.env.PATH for packaged macOS app
 fixSystemPath()
 
@@ -63,6 +68,22 @@ app.on('ready', async () => {
     const s = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf-8'))
     if (s.screenMode) initialScreenMode = s.screenMode
   } catch {}
+
+  // Spawn bundled digiCamControl for Windows
+  if (process.platform === 'win32') {
+    const { spawn } = require('child_process')
+    const dccPath = app.isPackaged 
+      ? path.join(process.resourcesPath, 'digiCamControl', 'CameraControl.exe')
+      : path.join(ROOT, 'digiCamControl', 'CameraControl.exe')
+    
+    if (fs.existsSync(dccPath)) {
+      console.log('Spawning bundled digiCamControl from:', dccPath)
+      const dccProc = spawn(dccPath, ['/minimized'], { detached: true, stdio: 'ignore' })
+      dccProc.unref()
+    } else {
+      console.warn('Bundled digiCamControl not found at:', dccPath)
+    }
+  }
 
   mainWindow = new BrowserWindow({
     width: Math.min(screenWidth, 1920),

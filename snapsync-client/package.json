@@ -7,7 +7,7 @@
   "main": "dist/main/index.js",
   "scripts": {
     "dev": "npm run clean && tsc && npm run build:renderer && electron-forge start",
-    "clean": "rm -rf dist",
+    "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\"",
     "build": "tsc && npm run build:renderer",
     "build:renderer": "esbuild src/renderer/app.ts --bundle --outfile=dist/renderer/app.js --platform=browser --format=iife --global-name=BoothApp",
     "start": "electron-forge start",
@@ -33,8 +33,11 @@
     "@types/better-sqlite3": "^7.6.8",
     "@types/node": "^20.11.5",
     "@types/qrcode": "^1.5.6",
-    "electron": "^28.1.3",
+    "electron": "^28.3.3",
     "esbuild": "^0.20.0",
     "typescript": "^5.3.3"
+  },
+  "allowScripts": {
+    "electron@28.3.3": true
   }
 }

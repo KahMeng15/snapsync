@@ -32,35 +32,64 @@ The easiest way to deploy the snapsync server for production is using Docker Com
 
 ## Compiling and Running the Client App
 
-The Photobooth capture client runs as an Electron application on macOS (or Windows/Linux).
+The Photobooth capture client runs as an Electron application on macOS and Windows.
 
-1. **Install Dependencies:**
+### macOS Build Instructions
+
+1. **Prerequisites:** 
+   Install [Node.js](https://nodejs.org/) on your Mac.
+
+2. **Install Dependencies:**
    Navigate to the client directory and install the required packages:
    ```bash
    cd snapsync-client
    npm install
    ```
 
-2. **Run in Development Mode:**
-   If you just want to run the app quickly for testing without packaging it:
+3. **Run in Development Mode:**
+   To run the app quickly for testing without packaging it:
    ```bash
    npm run dev
    ```
-   *This compiles TypeScript and launches the booth in a framed window with DevTools open.*
 
-3. **Package a Standalone App:**
-   To compile the app into a standalone, double-clickable `.app` bundle (for Mac) or executable:
-   ```bash
-   npm run package
-   ```
-   *The resulting app bundle will be available in the `snapsync-client/out/` folder (e.g. `snapsync-client/out/snapsync Booth-darwin-arm64/snapsync Booth.app`). You can drag this directly to your Applications folder!*
-
-4. **Build a Shareable Installer:**
-   To create an installer disk image (like a `.dmg` or `.zip`):
+4. **Package and Make Installer:**
+   To create a standalone `.app` bundle and a shareable installer (`.dmg` or `.zip`):
    ```bash
    npm run make
    ```
    *The resulting installer files will be placed in: `snapsync-client/out/make/`*
+
+### Windows Build Instructions
+
+Building the client on Windows requires compiling native C++ database drivers (`better-sqlite3`) and bundling the Windows camera backend (`digiCamControl`).
+
+1. **Developer Prerequisites:**
+   - Install [Node.js](https://nodejs.org/).
+   - Install Python 3.
+   - Install [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) and select the **Desktop development with C++** workload.
+
+2. **Bundle DigiCamControl:**
+   - Install [DigiCamControl](http://digicamcontrol.com/) on your PC.
+   - Copy the installation folder (usually `C:\Program Files (x86)\digiCamControl`) into the `snapsync-client` project folder and rename it to `digiCamControl`. 
+   *(The build script expects `snapsync-client/digiCamControl` to exist so it can bundle it).*
+
+3. **Install Dependencies:**
+   Navigate to the client directory in PowerShell or Command Prompt:
+   ```bash
+   cd snapsync-client
+   npm install
+   ```
+
+4. **Run in Development Mode:**
+   ```bash
+   npm run dev
+   ```
+
+5. **Make Windows Installer (.exe):**
+   ```bash
+   npm run make
+   ```
+   *Electron Forge will compile everything into a standalone `snapsync-booth Setup.exe` file in the `snapsync-client/out/make/` folder. Your end users just double-click this `.exe`—they do not need to install Node, Python, or DigiCamControl!*
 
 ---
 
