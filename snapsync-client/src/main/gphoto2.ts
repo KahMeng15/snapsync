@@ -762,9 +762,7 @@ class Gphoto2LiveviewStream {
     const UID = `gui/$(id -u)`
     const proc = spawn('bash', [
       '-c',
-      // Disable + bootout PTPCamera from launchd so it can't respawn
-      `launchctl disable ${UID}/com.apple.ptpcamerad 2>/dev/null; ` +
-      `launchctl disable ${UID}/com.apple.imagecaptured 2>/dev/null; ` +
+      // bootout PTPCamera from launchd so it can't respawn
       `launchctl bootout ${UID} /System/Library/LaunchAgents/com.apple.ptpcamerad.plist 2>/dev/null; ` +
       `launchctl bootout ${UID} /System/Library/LaunchAgents/com.apple.imagecaptured.plist 2>/dev/null; ` +
       `pkill -9 -f PTPCamera 2>/dev/null; ` +
