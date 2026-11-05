@@ -88,6 +88,7 @@ interface BoothSettings {
   screenMode?: 'fullscreen' | 'windowed-fullscreen' | 'windowed'
   mirrorLivePreview?: boolean
   mirrorPostSessionPreview?: boolean
+  disableShutterCue?: boolean
 }
 
 interface MediaDeviceInfo {
@@ -101,7 +102,7 @@ export class Settings {
   public get isVisible() { return this.visible }
   private dirty = false
   private onChange: (settings: BoothSettings) => void
-  private settings: BoothSettings = { photoCount: 4, countdown: 5, captureInterval: 1, postCapturePreview: 2, serverUrl: '', cameraMode: 'webcam', dslrIso: 'auto', dslrShutterSpeed: 'auto', dslrAperture: 'auto', dslrFocusMode: 'auto', dslrWhiteBalance: 'auto', dslrWhiteBalanceKelvin: 5200, liveviewMode: 'mjpeg', autoPreview: false, liveviewRetryAttempts: 1, shutterOffsetDelay: 0, inactivityTimeout: 30, screenMode: 'windowed', mirrorLivePreview: false, mirrorPostSessionPreview: false }
+  private settings: BoothSettings = { photoCount: 4, countdown: 5, captureInterval: 1, postCapturePreview: 2, serverUrl: '', cameraMode: 'webcam', dslrIso: 'auto', dslrShutterSpeed: 'auto', dslrAperture: 'auto', dslrFocusMode: 'auto', dslrWhiteBalance: 'auto', dslrWhiteBalanceKelvin: 5200, liveviewMode: 'mjpeg', autoPreview: false, liveviewRetryAttempts: 1, shutterOffsetDelay: 0, inactivityTimeout: 30, screenMode: 'windowed', mirrorLivePreview: false, mirrorPostSessionPreview: false, disableShutterCue: false }
   private smSelect!: HTMLSelectElement
   private serverInput!: HTMLInputElement
   private cameraSelect!: HTMLSelectElement
@@ -142,6 +143,8 @@ export class Settings {
   private mirrorLiveThumb!: HTMLDivElement
   private mirrorPostSessionTrack!: HTMLDivElement
   private mirrorPostSessionThumb!: HTMLDivElement
+  private disableShutterCueTrack!: HTMLDivElement
+  private disableShutterCueThumb!: HTMLDivElement
   private wbSelect!: HTMLSelectElement
   private wbKelvinRow!: HTMLDivElement
   private wbKelvinInput!: HTMLInputElement
@@ -517,7 +520,34 @@ export class Settings {
     const settingsBox = document.createElement('div')
     settingsBox.style.cssText = 'border: 1px solid #2a2a2a; border-radius: 8px; overflow: hidden;'
     for (const f of fields) settingsBox.appendChild(f)
-    fields[fields.length - 1].style.borderBottom = 'none'
+
+    const shutterCueRow = document.createElement('div')
+    shutterCueRow.style.cssText = 'display: flex; padding: 0.5rem 0.75rem; background: #191919; align-items: center; justify-content: space-between;'
+
+    const shutterCueLabel = document.createElement('label')
+    shutterCueLabel.textContent = 'Disable shutter cue'
+    shutterCueLabel.title = 'Disable screen flash and shutter audio cue during capture'
+    shutterCueLabel.style.cssText = 'font-size: 0.8125rem; color: #ccc; font-weight: 500; cursor: pointer;'
+    shutterCueRow.appendChild(shutterCueLabel)
+
+    this.disableShutterCueTrack = document.createElement('div')
+    this.disableShutterCueThumb = document.createElement('div')
+    const applyDisableShutterCue = (on: boolean) => {
+      this.disableShutterCueTrack.style.cssText = `position: relative; width: 44px; height: 24px; border-radius: 12px; cursor: pointer; transition: background 150ms; flex-shrink: 0; background: ${on ? '#fff' : '#333'};`
+      this.disableShutterCueThumb.style.cssText = `position: absolute; top: 3px; left: ${on ? '23px' : '3px'}; width: 18px; height: 18px; border-radius: 50%; background: ${on ? '#000' : '#888'}; transition: left 150ms;`
+    }
+    applyDisableShutterCue(!!this.settings.disableShutterCue)
+    this.disableShutterCueTrack.appendChild(this.disableShutterCueThumb)
+    const toggleDisableShutterCue = () => {
+      this.settings.disableShutterCue = !this.settings.disableShutterCue
+      applyDisableShutterCue(!!this.settings.disableShutterCue)
+      this.markDirty()
+    }
+    this.disableShutterCueTrack.addEventListener('click', toggleDisableShutterCue)
+    shutterCueLabel.addEventListener('click', toggleDisableShutterCue)
+    shutterCueRow.appendChild(this.disableShutterCueTrack)
+    settingsBox.appendChild(shutterCueRow)
+
     col3.appendChild(settingsBox)
 
     const lvTitle = document.createElement('h3')
@@ -1634,6 +1664,13 @@ export class Settings {
       this.mirrorPostSessionTrack.style.background = on ? '#fff' : '#333'
       this.mirrorPostSessionThumb.style.left = on ? '23px' : '3px'
       this.mirrorPostSessionThumb.style.background = on ? '#000' : '#888'
+    }
+
+    if (this.disableShutterCueTrack) {
+      const on = !!this.settings.disableShutterCue
+      this.disableShutterCueTrack.style.background = on ? '#fff' : '#333'
+      this.disableShutterCueThumb.style.left = on ? '23px' : '3px'
+      this.disableShutterCueThumb.style.background = on ? '#000' : '#888'
     }
 
     if (this.passcodeInput) {

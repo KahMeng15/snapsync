@@ -1,5 +1,9 @@
 const { execSync } = require('child_process')
 const path = require('path')
+const fs = require('fs')
+
+const dccPath = path.join(__dirname, 'digiCamControl')
+const extraResource = fs.existsSync(dccPath) ? ['./digiCamControl'] : []
 
 module.exports = {
   packagerConfig: {
@@ -10,9 +14,7 @@ module.exports = {
     appBundleId: 'com.snapsync.booth',
     osxSign: {},
     osxNotarize: undefined,
-    extraResource: [
-      './digiCamControl'
-    ]
+    extraResource,
   },
   makers: [
     {

@@ -102,7 +102,8 @@ export class BoothApp {
     inactivityTimeout?: number
     mirrorLivePreview?: boolean
     mirrorPostSessionPreview?: boolean
-  } = { photoCount: 4, countdown: 5, captureInterval: 1, postCapturePreview: 2, serverUrl: '', liveviewMode: 'mjpeg', autoPreview: false, liveviewRetryAttempts: 1, shutterOffsetDelay: 0, dslrWhiteBalance: 'auto', dslrWhiteBalanceKelvin: 5200, mirrorLivePreview: false, mirrorPostSessionPreview: false }
+    disableShutterCue?: boolean
+  } = { photoCount: 4, countdown: 5, captureInterval: 1, postCapturePreview: 2, serverUrl: '', liveviewMode: 'mjpeg', autoPreview: false, liveviewRetryAttempts: 1, shutterOffsetDelay: 0, dslrWhiteBalance: 'auto', dslrWhiteBalanceKelvin: 5200, mirrorLivePreview: false, mirrorPostSessionPreview: false, disableShutterCue: false }
   private serverOnline = true
   private serverUrl = ''
   private inactivityTimer: NodeJS.Timeout | null = null
@@ -430,6 +431,14 @@ export class BoothApp {
     settingsLink.addEventListener('click', () => this.openSettings('full'))
     this.landingEl.appendChild(settingsLink)
 
+    // Upload status bar (placed under main content in landing screen)
+    this.uploadStatusBar = document.createElement('div')
+    this.uploadStatusBar.className = 'booth-upload-status-bar'
+    this.uploadStatusBar.addEventListener('click', () => {
+      this.openSettings('full')
+    })
+    this.landingEl.appendChild(this.uploadStatusBar)
+
     // ------------------------------------------------------------------
     // Offline confirm modal
     // ------------------------------------------------------------------
@@ -521,10 +530,6 @@ export class BoothApp {
     this.offlineIndicator = new OfflineIndicator(this.container)
     this.gallery = new Gallery(this.container)
 
-    // Upload status bar
-    this.uploadStatusBar = document.createElement('div')
-    this.uploadStatusBar.className = 'booth-upload-status-bar'
-    this.container.appendChild(this.uploadStatusBar)
     this.settings = new Settings(this.container, (s) => {
       const prevMode = this.cameraMode
       this.settingsData = s
@@ -1342,12 +1347,12 @@ export class BoothApp {
     overlay.style.cssText = `
       position: absolute; inset: 0;
       display: flex; flex-direction: column; align-items: center; justify-content: center;
-      background: rgba(0,0,0,0.5); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+      background: rgba(0,0,0,0.7);
       color: #fff; font-family: sans-serif; z-index: 20;
     `
     overlay.innerHTML = `
-      <div style="width: 28px; height: 28px; border: 3px solid rgba(255,255,255,0.2); border-top-color: #fff; border-radius: 50%; animation: spin 0.8s linear infinite; box-sizing: border-box;"></div>
-      <div style="margin-top: 1rem; font-size: 1rem; opacity: 0.8;">Connecting camera…</div>
+      <div style="width: 28px; height: 28px; border: 3px solid rgba(255,255,255,0.2); border-top-color: #fff; border-radius: 50%; animation: spin 1s linear infinite; will-change: transform; transform: translateZ(0); box-sizing: border-box;"></div>
+      <div style="margin-top: 1rem; font-size: 1rem; opacity: 0.85;">Connecting camera…</div>
     `
     // Insert into previewBox (needs position: relative)
     this.previewBox.style.position = 'relative'
@@ -1588,7 +1593,7 @@ export class BoothApp {
         paths.push(result.path)
         // Webcam capture is instant so sound+flash happens here;
         // DSLR captureDslrShot already played it optimistically before download.
-        if (this.cameraMode !== 'dslr') {
+        if (this.cameraMode !== 'dslr' && !this.settingsData.disableShutterCue) {
           this.audio.playShutter()
           await this.flashWhite()
         }
@@ -1812,7 +1817,7 @@ export class BoothApp {
       if (result.path) {
         this.currentPaths[targetIndex] = result.path
         
-        if (this.cameraMode !== 'dslr') {
+        if (this.cameraMode !== 'dslr' && !this.settingsData.disableShutterCue) {
           this.audio.playShutter()
           this.flashWhite().catch(() => {})
         }
@@ -1968,9 +1973,11 @@ export class BoothApp {
 
     // Play shutter sound + flash 1 s after the processing overlay appears
     // (gives the camera time to begin the capture before we cue the user)
-    await this.delay(1000)
-    this.audio.playShutter()
-    this.flashWhite().catch(() => {})
+    if (!this.settingsData.disableShutterCue) {
+      await this.delay(1000)
+      this.audio.playShutter()
+      this.flashWhite().catch(() => {})
+    }
 
     const result = await capturePromise
     console.log('[BoothApp] captureDslrShot() — capture result:', JSON.stringify(result))
@@ -1989,13 +1996,13 @@ export class BoothApp {
       this.processingOverlay = document.createElement('div')
       Object.assign(this.processingOverlay.style, {
         position: 'absolute', inset: '0', zIndex: '55',
-        background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
+        background: 'rgba(0,0,0,0.7)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         flexDirection: 'column',
       })
       this.processingOverlay.innerHTML = `
-        <div style="width: 28px; height: 28px; border: 3px solid rgba(255,255,255,0.2); border-top-color: #fff; border-radius: 50%; animation: spin 0.8s linear infinite; box-sizing: border-box;"></div>
-        <div style="margin-top: 1rem; font-size: 1rem; opacity: 0.8;">Processing…</div>
+        <div style="width: 28px; height: 28px; border: 3px solid rgba(255,255,255,0.2); border-top-color: #fff; border-radius: 50%; animation: spin 1s linear infinite; will-change: transform; transform: translateZ(0); box-sizing: border-box;"></div>
+        <div style="margin-top: 1rem; font-size: 1rem; opacity: 0.85;">Processing…</div>
       `
     }
     // Ensure it's parented to previewBox (handles stale refs from hot-reloads)
@@ -2061,6 +2068,7 @@ export class BoothApp {
   // -------------------------------------------------------------------------
 
   private async flashWhite() {
+    if (this.settingsData.disableShutterCue) return
     this.flashOverlay.style.transition = 'none'
     this.flashOverlay.style.opacity = '1'
     await new Promise(r => requestAnimationFrame(r))
@@ -2118,9 +2126,15 @@ export class BoothApp {
     const total = data.pending + data.failed
     if (total === 0) {
       this.uploadStatusBar.style.display = 'none'
+      this.uploadStatusBar.classList.remove('has-failed')
       return
     }
     this.uploadStatusBar.style.display = 'flex'
+    if (data.failed > 0) {
+      this.uploadStatusBar.classList.add('has-failed')
+    } else {
+      this.uploadStatusBar.classList.remove('has-failed')
+    }
     const parts: string[] = []
     if (data.pending > 0) parts.push(`↑ ${data.pending} uploading`)
     if (data.failed > 0) parts.push(`⚠ ${data.failed} failed — open Settings to retry`)

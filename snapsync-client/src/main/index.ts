@@ -5,10 +5,12 @@ import { initIpcHandlers, applyScreenMode } from './ipc'
 import { OfflineQueue } from './offlineQueue'
 import { DslrManager, restorePtpDaemons, fixSystemPath } from './gphoto2'
 
-// Disable hardware acceleration to prevent GPU crashes on some Windows/ARM64 setups
-app.disableHardwareAcceleration()
-app.commandLine.appendSwitch('disable-gpu')
-app.commandLine.appendSwitch('disable-gpu-compositing')
+// Disable hardware acceleration only on Windows setups where GPU crashes were observed
+if (process.platform === 'win32') {
+  app.disableHardwareAcceleration()
+  app.commandLine.appendSwitch('disable-gpu')
+  app.commandLine.appendSwitch('disable-gpu-compositing')
+}
 
 // Ensure Homebrew and standard CLI paths are present in process.env.PATH for packaged macOS app
 fixSystemPath()

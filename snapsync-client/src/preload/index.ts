@@ -99,6 +99,7 @@ contextBridge.exposeInMainWorld('snapsync', {
     dslrWhiteBalanceKelvin?: number
     mirrorLivePreview?: boolean
     mirrorPostSessionPreview?: boolean
+    disableShutterCue?: boolean
   }) => ipcRenderer.invoke('save-settings', settings),
 
   getServerConfig: () => ipcRenderer.invoke('get-server-config'),

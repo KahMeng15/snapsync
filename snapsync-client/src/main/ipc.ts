@@ -54,6 +54,7 @@ const DEFAULT_SETTINGS = {
   screenMode: 'windowed' as 'fullscreen' | 'windowed-fullscreen' | 'windowed',
   mirrorLivePreview: false,
   mirrorPostSessionPreview: false,
+  disableShutterCue: false,
   
   // Advanced Dev Settings (Network Simulation)
   devSimulationEnabled: false,
@@ -640,6 +641,7 @@ export function initIpcHandlers(
     devTimeoutPercent?: number
     mirrorLivePreview?: boolean
     mirrorPostSessionPreview?: boolean
+    disableShutterCue?: boolean
   }) => {
     try {
       const existing = getSettingsSync()
