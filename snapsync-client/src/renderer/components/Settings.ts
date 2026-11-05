@@ -512,7 +512,7 @@ export class Settings {
 
     const fields = [
       this.createField('Photos per session', 1, 4, this.settings.photoCount, (v) => { this.settings.photoCount = v; this.markDirty() }, false),
-      this.createField('Countdown (seconds)', 3, 10, this.settings.countdown, (v) => { this.settings.countdown = v; this.markDirty() }, true),
+      this.createField('Countdown (seconds)', 0, 10, this.settings.countdown, (v) => { this.settings.countdown = v; this.markDirty() }, true),
       this.createField('Interval (seconds)', 0, 5, this.settings.captureInterval, (v) => { this.settings.captureInterval = v; this.markDirty() }, false),
       this.createField('Preview (seconds)', 1, 5, this.settings.postCapturePreview, (v) => { this.settings.postCapturePreview = v; this.markDirty() }, true),
       this.createFloatField('Shutter offset (s)', 0, 10, 0.1, this.settings.shutterOffsetDelay || 0, (v) => { this.settings.shutterOffsetDelay = v; this.markDirty() }, false),
@@ -1685,7 +1685,15 @@ export class Settings {
       this.serverInput.value = this.settings.serverUrl || ''
     }
 
-    const numValues = [this.settings.inactivityTimeout ?? 30, this.settings.liveviewRetryAttempts || 1, this.settings.photoCount, this.settings.countdown, this.settings.captureInterval, this.settings.postCapturePreview, this.settings.shutterOffsetDelay || 0]
+    const numValues = [
+      this.settings.photoCount,
+      this.settings.countdown,
+      this.settings.captureInterval,
+      this.settings.postCapturePreview,
+      this.settings.shutterOffsetDelay || 0,
+      this.settings.liveviewRetryAttempts || 1,
+      this.settings.inactivityTimeout ?? 30
+    ]
     for (let i = 0; i < this.numInputs.length; i++) {
       this.numInputs[i].value = String(numValues[i])
     }

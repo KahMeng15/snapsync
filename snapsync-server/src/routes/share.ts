@@ -284,20 +284,99 @@ router.get('/:token/download-all', async (req: Request, res: Response) => {
     if (!event) return res.status(404).json({ error: 'Event not found' })
     if (checkExpiry(event)) return res.status(403).json({ error: 'Expired' })
 
-    const eventDir = config.eventPhotosDir(eventId)
-    let files: string[] = []
-    try { files = await fs.readdir(eventDir) } catch {}
+    const safeEventName = event.name.replace(/[^a-zA-Z0-9_-]/g, '_')
+    const filesToZip: { filePath: string; zipName: string; isWebpToConvert?: boolean }[] = []
 
-    const sessionFiles = files
-      .filter((f) => !f.includes('_thumb') && !f.includes('_strip'))
-      .filter((f) => isSessionToken ? f.startsWith(sessionFilter) : true)
-      .sort()
+    // 1. Framed photos (if active frames exist)
+    const activeFrames = await getActiveFrames(eventId)
+    if (activeFrames.length > 0) {
+      const framedDir = config.eventFramedPhotos(eventId)
+      let framedFiles: string[] = []
+      try {
+        framedFiles = await fs.readdir(framedDir)
+      } catch {
+        framedFiles = []
+      }
 
-    if (sessionFiles.length === 0) {
+      const sessionFramedFiles = framedFiles
+        .filter((f) => !f.includes('_thumb') && f.endsWith('.webp'))
+        .filter((f) => isSessionToken ? f.startsWith(sessionFilter) : true)
+        .sort()
+
+      for (let i = 0; i < sessionFramedFiles.length; i++) {
+        const name = sessionFramedFiles[i]
+        let frameId = ''
+        let frameName = ''
+        let isActive = false
+        for (const f of activeFrames) {
+          if (name.includes(`_${f.id}`)) {
+            frameId = f.id
+            frameName = f.config.name
+            isActive = true
+            break
+          }
+        }
+        if (!isActive) continue
+
+        const jpegName = name.replace(/(\.webp)$/, '.jpg')
+        const jpegExists = framedFiles.includes(jpegName)
+        const indexMatch = name.match(/_(\d+)\.webp$/)
+        const photoNum = indexMatch ? indexMatch[1] : (i + 1).toString()
+        const safeFrameName = frameName ? `_${frameName.replace(/[^a-zA-Z0-9_-]/g, '_')}` : (frameId ? `_${frameId}` : '')
+        const zipName = `${eventId}_${safeEventName}_framed${safeFrameName}_${photoNum}.jpg`
+
+        if (jpegExists) {
+          filesToZip.push({
+            filePath: path.join(framedDir, jpegName),
+            zipName,
+          })
+        } else {
+          filesToZip.push({
+            filePath: path.join(framedDir, name),
+            zipName,
+            isWebpToConvert: true,
+          })
+        }
+      }
+    }
+
+    // 2. Original (raw) photos (only if share_originals !== 0)
+    if ((event as any).share_originals !== 0) {
+      const eventDir = config.eventPhotosDir(eventId)
+      let rawFiles: string[] = []
+      try { rawFiles = await fs.readdir(eventDir) } catch {}
+
+      const sessionRawFiles = rawFiles
+        .filter((f) => !f.includes('_thumb') && !f.includes('_strip'))
+        .filter((f) => isSessionToken ? f.startsWith(sessionFilter) : true)
+        .sort()
+
+      for (let i = 0; i < sessionRawFiles.length; i++) {
+        const filename = sessionRawFiles[i]
+        const filePath = path.join(eventDir, filename)
+        const indexMatch = filename.match(/_(\d+)\.\w+$/)
+        const photoNum = indexMatch ? indexMatch[1] : (i + 1).toString()
+        const ext = path.extname(filename).toLowerCase()
+
+        if (ext === '.webp') {
+          filesToZip.push({
+            filePath,
+            zipName: `${eventId}_${safeEventName}_image_${photoNum}.jpg`,
+            isWebpToConvert: true,
+          })
+        } else {
+          filesToZip.push({
+            filePath,
+            zipName: `${eventId}_${safeEventName}_image_${photoNum}${ext}`,
+          })
+        }
+      }
+    }
+
+    if (filesToZip.length === 0) {
       return res.status(404).json({ error: 'No photos found' })
     }
 
-    const safeEventName = event.name.replace(/[^a-zA-Z0-9_-]/g, '_')
     const zipFilename = `${eventId}_${safeEventName}_photos.zip`
 
     res.setHeader('Content-Type', 'application/zip')
@@ -307,23 +386,17 @@ router.get('/:token/download-all', async (req: Request, res: Response) => {
     archive.on('error', (err: Error) => { throw err })
     archive.pipe(res)
 
-    for (let i = 0; i < sessionFiles.length; i++) {
-      const filename = sessionFiles[i]
-      const filePath = path.join(eventDir, filename)
-      const indexMatch = filename.match(/_(\d+)\.\w+$/)
-      const photoNum = indexMatch ? indexMatch[1] : (i + 1).toString()
-      const ext = path.extname(filename).toLowerCase()
-
+    for (const item of filesToZip) {
       try {
-        if (ext === '.webp') {
-          const webpBuf = await fs.readFile(filePath)
+        if (item.isWebpToConvert) {
+          const webpBuf = await fs.readFile(item.filePath)
           const jpegBuf = await sharp(webpBuf).jpeg({ quality: 85 }).toBuffer()
-          archive.append(jpegBuf, { name: `${eventId}_${safeEventName}_image_${photoNum}.jpg` })
+          archive.append(jpegBuf, { name: item.zipName })
         } else {
-          archive.file(filePath, { name: `${eventId}_${safeEventName}_image_${photoNum}${ext}` })
+          archive.file(item.filePath, { name: item.zipName })
         }
       } catch (err) {
-        logger.error(`Error adding file to zip: ${filename}`, err)
+        logger.error(`Error adding file to zip: ${item.filePath}`, err)
       }
     }
 
