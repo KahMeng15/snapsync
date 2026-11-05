@@ -464,6 +464,10 @@ input.ui-input:focus, select.ui-select:focus, textarea.ui-textarea:focus {
 .ui-photo-preview-img {
   border-radius: var(--radius-md); object-fit: contain; max-height: 80vh;
 }
+.ui-photo-preview-img.mirrored,
+.ui-photo-retake-img.mirrored {
+  transform: scaleX(-1);
+}
 .ui-photo-preview-img-full {
   width: calc(100% - 0.5rem);
 }

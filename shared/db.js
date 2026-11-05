@@ -8,6 +8,8 @@ exports.addEventOperator = addEventOperator;
 exports.listEventOperators = listEventOperators;
 exports.getEventOperatorByToken = getEventOperatorByToken;
 exports.deleteEventOperator = deleteEventOperator;
+exports.generateOtp = generateOtp;
+exports.regenerateEventOtp = regenerateEventOtp;
 exports.createEvent = createEvent;
 exports.updateEventById = updateEventById;
 exports.updateEventSettingsById = updateEventSettingsById;
@@ -759,6 +761,27 @@ function generateOtp() {
     if (exists)
         return generateOtp();
     return digits;
+}
+function regenerateEventOtp(id, customOtp) {
+    const event = getEvent(id);
+    if (!event)
+        throw new Error('Event not found');
+    let otp = customOtp?.trim();
+    if (otp) {
+        if (!/^\d{6}$/.test(otp)) {
+            throw new Error('OTP must be exactly 6 digits');
+        }
+        const exists = db.prepare('SELECT id FROM events WHERE otp = ? AND id != ?').get(otp, id);
+        if (exists) {
+            throw new Error('This OTP is already in use by another event');
+        }
+    }
+    else {
+        otp = generateOtp();
+    }
+    db.prepare('UPDATE events SET otp = ? WHERE id = ?').run(otp, id);
+    logger_1.logger.info(`Event OTP updated: ${id} otp=${otp}`);
+    return otp;
 }
 function createEvent(name, date, description, settings) {
     const id = `evt_${Date.now()}_${(0, crypto_1.randomInt)(1000, 9999)}`;

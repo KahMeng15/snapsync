@@ -33,6 +33,16 @@ export class PhotoPreview {
   private progressBar?: HTMLDivElement
   private progressFill?: HTMLDivElement
   private progressText?: HTMLDivElement
+  private mirror: boolean = false
+
+  public setMirror(mirror: boolean) {
+    this.mirror = mirror
+    const imgs = this.overlay.querySelectorAll<HTMLImageElement>('.ui-photo-preview-img, .ui-photo-retake-img')
+    imgs.forEach((img) => {
+      img.classList.toggle('mirrored', mirror)
+      img.style.transform = mirror ? 'scaleX(-1)' : 'none'
+    })
+  }
 
   constructor(container: HTMLElement, onRetake: (indices: number[]) => void, onConfirm: () => void, onRetakeSelectionChanged?: (indices: number[]) => void) {
     this.onRetakeSelectionChanged = onRetakeSelectionChanged
@@ -109,6 +119,10 @@ export class PhotoPreview {
     for (const p of paths) {
       const img = document.createElement('img')
       img.className = paths.length === 1 ? 'ui-photo-preview-img ui-photo-preview-img-full' : 'ui-photo-preview-img ui-photo-preview-img-half'
+      if (this.mirror) {
+        img.classList.add('mirrored')
+        img.style.transform = 'scaleX(-1)'
+      }
       img.src = p.startsWith('blob:') || p.startsWith('http') || p.startsWith('file://') ? p : `file://${p}`
       grid.appendChild(img)
     }
@@ -296,6 +310,10 @@ export class PhotoPreview {
       
       const img = document.createElement('img')
       img.className = 'ui-photo-retake-img'
+      if (this.mirror) {
+        img.classList.add('mirrored')
+        img.style.transform = 'scaleX(-1)'
+      }
       this.retakeImgs.push(img)
       img.src = p.startsWith('blob:') || p.startsWith('http') ? p : `file://${p}`
 

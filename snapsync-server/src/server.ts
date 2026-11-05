@@ -454,6 +454,19 @@ function notifyBoothConnected(eventId: string, connected: boolean) {
   }
 }
 
+function disconnectBooth(eventId: string) {
+  const sockets = boothSockets.get(eventId)
+  if (sockets && sockets.size > 0) {
+    for (const sid of Array.from(sockets)) {
+      const s = io.sockets.sockets.get(sid)
+      if (s) {
+        s.emit('otp-invalidated', { message: 'Booth OTP has been reset' })
+        s.disconnect(true)
+      }
+    }
+  }
+}
+
 const BOOTH_TIMEOUT = 30000
 function getBoothStatus() {
   return { state: 'offline', online: false }
@@ -508,4 +521,4 @@ function shutdown(signal: string) {
 process.on('SIGINT', () => shutdown('SIGINT'))
 process.on('SIGTERM', () => shutdown('SIGTERM'))
 
-export { app, server, io, boothSockets, operatorSubscriptions }
+export { app, server, io, boothSockets, operatorSubscriptions, disconnectBooth }

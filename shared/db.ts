@@ -385,11 +385,31 @@ const listActivePhotoSessionsByEvent = db.prepare(
   "SELECT * FROM photo_sessions WHERE event_id = ? AND archived = 0 ORDER BY created_at DESC"
 )
 
-function generateOtp(): string {
+export function generateOtp(): string {
   const digits = randomInt(0, 1000000).toString().padStart(6, '0')
   const exists = db.prepare('SELECT 1 FROM events WHERE otp = ?').get(digits)
   if (exists) return generateOtp()
   return digits
+}
+
+export function regenerateEventOtp(id: string, customOtp?: string): string {
+  const event = getEvent(id)
+  if (!event) throw new Error('Event not found')
+  let otp = customOtp?.trim()
+  if (otp) {
+    if (!/^\d{6}$/.test(otp)) {
+      throw new Error('OTP must be exactly 6 digits')
+    }
+    const exists = db.prepare('SELECT id FROM events WHERE otp = ? AND id != ?').get(otp, id)
+    if (exists) {
+      throw new Error('This OTP is already in use by another event')
+    }
+  } else {
+    otp = generateOtp()
+  }
+  db.prepare('UPDATE events SET otp = ? WHERE id = ?').run(otp, id)
+  logger.info(`Event OTP updated: ${id} otp=${otp}`)
+  return otp
 }
 
 export function createEvent(name: string, date: string, description: string, settings?: { photoCount?: number; countdown?: number; captureInterval?: number; postCapturePreview?: number; dslrIso?: string; dslrShutterSpeed?: string; dslrAperture?: string; dslrFocusMode?: string; dslrWhiteBalance?: string; dslrWhiteBalanceKelvin?: number; obfuscateLinks?: number; expiryType?: string; expiryValue?: string; organizer?: string; contactInfo?: string }) {

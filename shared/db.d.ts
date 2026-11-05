@@ -16,6 +16,8 @@ export declare function getEventOperatorByToken(token: string): {
     created_at: string;
 } | undefined;
 export declare function deleteEventOperator(id: string, eventId: string): void;
+export declare function generateOtp(): string;
+export declare function regenerateEventOtp(id: string, customOtp?: string): string;
 export declare function createEvent(name: string, date: string, description: string, settings?: {
     photoCount?: number;
     countdown?: number;

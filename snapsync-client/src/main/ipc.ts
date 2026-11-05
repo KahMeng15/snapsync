@@ -52,6 +52,8 @@ const DEFAULT_SETTINGS = {
   shutterOffsetDelay: 0,
   dslrWhiteBalanceKelvin: 5200,
   screenMode: 'windowed' as 'fullscreen' | 'windowed-fullscreen' | 'windowed',
+  mirrorLivePreview: false,
+  mirrorPostSessionPreview: false,
   
   // Advanced Dev Settings (Network Simulation)
   devSimulationEnabled: false,
@@ -636,6 +638,8 @@ export function initIpcHandlers(
     devPacketLossPercent?: number
     devServerErrorPercent?: number
     devTimeoutPercent?: number
+    mirrorLivePreview?: boolean
+    mirrorPostSessionPreview?: boolean
   }) => {
     try {
       const existing = getSettingsSync()

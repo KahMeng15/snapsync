@@ -107,6 +107,8 @@ declare global {
         devPacketLossPercent?: number
         devServerErrorPercent?: number
         devTimeoutPercent?: number
+        mirrorLivePreview?: boolean
+        mirrorPostSessionPreview?: boolean
       }) => Promise<any>
       getServerConfig: () => Promise<{ serverUrl: string }>
       killPtpDaemon: () => Promise<{ success: boolean; error?: string }>

@@ -28,6 +28,45 @@
       </section>
 
       <section class="card">
+        <div class="card-header-flex" style="margin-bottom: 0.5rem;">
+          <div>
+            <h2>Booth Pairing Code</h2>
+            <p class="card-desc" style="margin-bottom: 0;">Use this 6-digit OTP code on the snapsync booth to connect it to this event.</p>
+          </div>
+          <span class="badge-booth">Booth Code</span>
+        </div>
+        <div class="settings-box">
+          <div class="field-row otp-pairing-row">
+            <div class="otp-pairing-left">
+              <label>Current OTP</label>
+              <div class="otp-pill-group">
+                <span class="otp-pill-code">{{ event?.otp || '------' }}</span>
+                <button type="button" class="btn-copy-otp" @click="copyOtp" :title="otpCopied ? 'Copied!' : 'Copy OTP'">
+                  <svg v-if="!otpCopied" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                  </svg>
+                  <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                  </svg>
+                  <span>{{ otpCopied ? 'Copied' : 'Copy' }}</span>
+                </button>
+              </div>
+            </div>
+            <div class="otp-pairing-right">
+              <AppButton variant="secondary" size="sm" @click="openResetOtpModal">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 0.35rem;">
+                  <polyline points="23 4 23 10 17 10"></polyline>
+                  <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                </svg>
+                Reset Code
+              </AppButton>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
         <h2>Access Expiration</h2>
         <p class="card-desc">Control when the event gallery link stops working.</p>
         <div class="settings-box">
@@ -227,6 +266,57 @@
       </div>
 
     </div>
+
+    <!-- Reset Booth OTP Modal -->
+    <AppModal v-model="showResetModal" title="Reset Booth OTP Code">
+      <div class="reset-otp-modal-content">
+        <div class="reset-warning-banner">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;">
+            <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path>
+            <line x1="12" y1="9" x2="12" y2="13"></line>
+            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+          </svg>
+          <div style="font-size: var(--text-sm); color: var(--color-text-sub); line-height: 1.4;">
+            Resetting the booth OTP code will disconnect any booth currently connected to this event. You will need to enter the new code on the booth to reconnect.
+          </div>
+        </div>
+
+        <div style="margin-top: 1.25rem;">
+          <label style="display:block; margin-bottom: 0.5rem; font-size: var(--text-sm); font-weight: 500;">Generation Mode</label>
+          <div class="app-toggle" style="width: fit-content; margin-bottom: 1rem;">
+            <button type="button" :class="['app-toggle-btn', !isCustomOtp ? 'app-toggle-active' : '']" @click="isCustomOtp = false">Auto Generate</button>
+            <button type="button" :class="['app-toggle-btn', isCustomOtp ? 'app-toggle-active' : '']" @click="isCustomOtp = true">Custom 6-Digit Code</button>
+          </div>
+
+          <div v-if="isCustomOtp" style="margin-top: 0.75rem;">
+            <label style="display:block; margin-bottom: 0.5rem; font-size: var(--text-sm); color: var(--color-text-sub);">Enter 6-digit numeric OTP</label>
+            <input
+              type="text"
+              inputmode="numeric"
+              maxlength="6"
+              v-model="customOtpInput"
+              placeholder="e.g. 583920"
+              class="text-input"
+              style="width: 100%; box-sizing: border-box; font-family: monospace; font-size: 1.25rem; letter-spacing: 0.25rem; text-align: center;"
+              @input="customOtpInput = customOtpInput.replace(/\D/g, '')"
+            />
+            <p v-if="customOtpInput && customOtpInput.length !== 6" style="color: var(--color-danger, #ef4444); font-size: var(--text-xs); margin-top: 0.35rem;">
+              Code must be exactly 6 digits
+            </p>
+          </div>
+          <div v-else style="font-size: var(--text-sm); color: var(--color-text-muted);">
+            A unique, random 6-digit code will be generated immediately.
+          </div>
+        </div>
+      </div>
+
+      <template #footer>
+        <AppButton variant="secondary" @click="showResetModal = false">Cancel</AppButton>
+        <AppButton variant="primary" @click="confirmResetOtp" :disabled="resettingOtp || (isCustomOtp && customOtpInput.length !== 6)">
+          {{ resettingOtp ? 'Resetting...' : 'Confirm Reset' }}
+        </AppButton>
+      </template>
+    </AppModal>
   </div>
 </template>
 
@@ -235,6 +325,7 @@ import { ref, onMounted, computed, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import AppTopNav from '../components/ui/AppTopNav.vue'
 import AppButton from '../components/ui/AppButton.vue'
+import AppModal from '../components/ui/AppModal.vue'
 // import AppPageLayout from '../components/ui/AppPageLayout.vue'
 import axios from 'axios'
 
@@ -248,6 +339,51 @@ const authStore = useAuthStore()
 
 const eventId = computed(() => route.params.id as string)
 const event = ref<any>(null)
+
+const otpCopied = ref(false)
+const showResetModal = ref(false)
+const isCustomOtp = ref(false)
+const customOtpInput = ref('')
+const resettingOtp = ref(false)
+
+async function copyOtp() {
+  if (!event.value?.otp) return
+  try {
+    await navigator.clipboard.writeText(event.value.otp)
+    otpCopied.value = true
+    toast.success('Booth OTP copied to clipboard')
+    setTimeout(() => { otpCopied.value = false }, 2000)
+  } catch {
+    toast.error('Failed to copy OTP')
+  }
+}
+
+function openResetOtpModal() {
+  isCustomOtp.value = false
+  customOtpInput.value = ''
+  showResetModal.value = true
+}
+
+async function confirmResetOtp() {
+  if (isCustomOtp.value && (!customOtpInput.value || customOtpInput.value.length !== 6)) {
+    toast.error('Code must be exactly 6 digits')
+    return
+  }
+  resettingOtp.value = true
+  try {
+    const payload = isCustomOtp.value ? { otp: customOtpInput.value } : {}
+    const { data } = await axios.post(`/api/admin/events/${eventId.value}/reset-otp`, payload)
+    if (event.value) {
+      event.value.otp = data.otp
+    }
+    showResetModal.value = false
+    toast.success(`Booth OTP code reset to ${data.otp}`)
+  } catch (err: any) {
+    toast.error(err.response?.data?.error || 'Failed to reset OTP code')
+  } finally {
+    resettingOtp.value = false
+  }
+}
 
 const operatorAccessUnlocked = ref(false)
 const adminUnlockPassword = ref('')
@@ -719,6 +855,79 @@ async function saveSettings() {
   text-align: left;
   display: block;
   width: 100%;
+}
+
+.badge-booth {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  padding: 0.25rem 0.625rem;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-alt);
+  color: var(--color-text-sub);
+  border: 1px solid var(--color-border);
+}
+
+.otp-pairing-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.otp-pairing-left {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.otp-pill-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.otp-pill-code {
+  font-family: monospace;
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: 0.2rem;
+  color: var(--color-text);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  padding: 0.35rem 0.85rem;
+  border-radius: var(--radius-sm);
+}
+
+.btn-copy-otp {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-sub);
+  padding: 0.45rem 0.75rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: var(--text-xs);
+  font-weight: 500;
+  transition: all 0.15s ease;
+}
+
+.btn-copy-otp:hover {
+  color: var(--color-text);
+  border-color: var(--color-text-sub);
+}
+
+.reset-warning-banner {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+  padding: 0.875rem 1rem;
+  background: color-mix(in srgb, #f59e0b 12%, transparent);
+  border: 1px solid color-mix(in srgb, #f59e0b 35%, transparent);
+  border-radius: var(--radius-md);
 }
 
 </style>

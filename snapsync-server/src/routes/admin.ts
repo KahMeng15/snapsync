@@ -12,7 +12,7 @@ import { jobQueue } from '../queue'
 import { pendingCommands } from './booth'
 import { v4 as uuidv4 } from 'uuid'
 import { applyFrame } from '../pipeline'
-import { io } from '../server'
+import { io, disconnectBooth } from '../server'
 import bcrypt from 'bcryptjs'
 import { requireRole, checkLoginLockout, recordFailedLogin, clearFailedLogin } from '../middleware/authMiddleware'
 import {
@@ -21,7 +21,8 @@ import {
   updateEventSettingsById, getGlobalSettings, updateGlobalSettings,
   archiveSession, restoreSession, getEventAnalytics,
   getAllUsers, insertUser, deleteUser, findUserByEmail, findUserById, updateUser, clearSuperAdmins, regenerateSessionShareId, setEventShareOriginals,
-  getSessionShares, createSessionShare, setSessionShareStatus, deleteSessionShare, setSessionDimensions, addEventOperator, listEventOperators, deleteEventOperator, getOrCreateEventShareToken
+  getSessionShares, createSessionShare, setSessionShareStatus, deleteSessionShare, setSessionDimensions, addEventOperator, listEventOperators, deleteEventOperator, getOrCreateEventShareToken,
+  regenerateEventOtp
 } from '@snapsync/shared'
 
 const router = Router()
@@ -694,6 +695,30 @@ const updateEventSchema = z.object({
       res.status(500).json({ error: error.message })
     }
   })
+
+const resetOtpSchema = z.object({
+  otp: z.string().regex(/^\d{6}$/, 'OTP must be exactly 6 digits').optional(),
+})
+
+router.post('/events/:id/reset-otp', async (req: Request, res: Response) => {
+  try {
+    const event = getEvent(req.params.id)
+    if (!event) return res.status(404).json({ error: 'Event not found' })
+
+    const parseResult = resetOtpSchema.safeParse(req.body || {})
+    if (!parseResult.success) {
+      return res.status(400).json({ error: parseResult.error.issues[0].message })
+    }
+
+    const newOtp = regenerateEventOtp(req.params.id, parseResult.data.otp)
+    disconnectBooth(req.params.id)
+    io.emit('event-otp-reset', { eventId: req.params.id, otp: newOtp })
+
+    res.json({ success: true, otp: newOtp })
+  } catch (error: any) {
+    res.status(400).json({ error: error.message })
+  }
+})
 
 router.get('/events/:eventId/sessions/:sessionId/shares', async (req: Request, res: Response) => {
   try {

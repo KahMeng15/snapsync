@@ -100,7 +100,9 @@ export class BoothApp {
     settingsPasscode?: string
     emailEnabled?: number
     inactivityTimeout?: number
-  } = { photoCount: 4, countdown: 5, captureInterval: 1, postCapturePreview: 2, serverUrl: '', liveviewMode: 'mjpeg', autoPreview: false, liveviewRetryAttempts: 1, shutterOffsetDelay: 0, dslrWhiteBalance: 'auto', dslrWhiteBalanceKelvin: 5200 }
+    mirrorLivePreview?: boolean
+    mirrorPostSessionPreview?: boolean
+  } = { photoCount: 4, countdown: 5, captureInterval: 1, postCapturePreview: 2, serverUrl: '', liveviewMode: 'mjpeg', autoPreview: false, liveviewRetryAttempts: 1, shutterOffsetDelay: 0, dslrWhiteBalance: 'auto', dslrWhiteBalanceKelvin: 5200, mirrorLivePreview: false, mirrorPostSessionPreview: false }
   private serverOnline = true
   private serverUrl = ''
   private inactivityTimer: NodeJS.Timeout | null = null
@@ -531,10 +533,21 @@ export class BoothApp {
       if (this.isLive && prevMode !== this.cameraMode) {
         this.restartPreview()
       }
+      this.applyMirrorSettings()
     })
 
+    this.applyMirrorSettings()
     this.setupKeyboardShortcuts()
     this.setupIpcListeners()
+  }
+
+  private applyMirrorSettings() {
+    const mirrorLive = !!this.settingsData.mirrorLivePreview
+    const transform = mirrorLive ? 'scaleX(-1)' : 'none'
+    this.webcamPreview.style.transform = transform
+    this.dslrPreview.element.style.transform = transform
+    this.postCaptureEl.style.transform = transform
+    this.photoPreview.setMirror(!!this.settingsData.mirrorPostSessionPreview)
   }
 
   // -------------------------------------------------------------------------
@@ -963,6 +976,7 @@ export class BoothApp {
       this.settingsData = { ...this.settingsData, ...cmd.settings }
       window.snapsync?.saveSettings(this.settingsData)
       this.updateLandingText()
+      this.applyMirrorSettings()
       if (cmd.settings?.dslrFocusMode) {
         window.snapsync?.dslrSetFocusMode(cmd.settings.dslrFocusMode)
       }
@@ -1108,6 +1122,7 @@ export class BoothApp {
       if (typeof this.settingsData.emailEnabled !== 'undefined') {
         this.gallery.emailEnabled = this.settingsData.emailEnabled !== 0
       }
+      this.applyMirrorSettings()
       console.log(`[BoothApp] mount() — cameraMode loaded from settings: "${this.cameraMode}"`)
       const otp = (settings as any).otp
       if (otp) {
@@ -1301,6 +1316,7 @@ export class BoothApp {
     console.log('[BoothApp] startDslrPreview() — calling dslrPreview.start()...')
     const started = await this.dslrPreview.start()
     this.dslrPreview.element.style.filter = 'none'
+    this.dslrPreview.element.style.transform = this.settingsData.mirrorLivePreview ? 'scaleX(-1)' : 'none'
     console.log(`[BoothApp] startDslrPreview() — dslrPreview.start() returned: ${started}`)
 
     connectingOverlay.remove()
@@ -1347,6 +1363,7 @@ export class BoothApp {
     const stream = await this.camera.startWebcam(this.settingsData.cameraDeviceId)
     if (stream) {
       this.webcamPreview.srcObject = stream
+      this.webcamPreview.style.transform = this.settingsData.mirrorLivePreview ? 'scaleX(-1)' : 'none'
       await this.webcamPreview.play()
       const track = stream.getVideoTracks()[0]
       const settings = track.getSettings()
@@ -2055,6 +2072,7 @@ export class BoothApp {
   private async showPostCapture(path: string, duration: number, currentShot: number, totalShots: number, signal?: AbortSignal) {
     const src = path.startsWith('blob:') || path.startsWith('http') || path.startsWith('file://') ? path : `file://${path}`
     this.postCaptureEl.src = src
+    this.postCaptureEl.style.transform = this.settingsData.mirrorLivePreview ? 'scaleX(-1)' : 'none'
     this.postCaptureEl.style.display = 'block'
 
     if (this.cameraMode === 'dslr') {

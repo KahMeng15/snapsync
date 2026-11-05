@@ -86,6 +86,8 @@ interface BoothSettings {
   devServerErrorPercent?: number
   devTimeoutPercent?: number
   screenMode?: 'fullscreen' | 'windowed-fullscreen' | 'windowed'
+  mirrorLivePreview?: boolean
+  mirrorPostSessionPreview?: boolean
 }
 
 interface MediaDeviceInfo {
@@ -99,7 +101,7 @@ export class Settings {
   public get isVisible() { return this.visible }
   private dirty = false
   private onChange: (settings: BoothSettings) => void
-  private settings: BoothSettings = { photoCount: 4, countdown: 5, captureInterval: 1, postCapturePreview: 2, serverUrl: '', cameraMode: 'webcam', dslrIso: 'auto', dslrShutterSpeed: 'auto', dslrAperture: 'auto', dslrFocusMode: 'auto', dslrWhiteBalance: 'auto', dslrWhiteBalanceKelvin: 5200, liveviewMode: 'mjpeg', autoPreview: false, liveviewRetryAttempts: 1, shutterOffsetDelay: 0, inactivityTimeout: 30, screenMode: 'windowed' }
+  private settings: BoothSettings = { photoCount: 4, countdown: 5, captureInterval: 1, postCapturePreview: 2, serverUrl: '', cameraMode: 'webcam', dslrIso: 'auto', dslrShutterSpeed: 'auto', dslrAperture: 'auto', dslrFocusMode: 'auto', dslrWhiteBalance: 'auto', dslrWhiteBalanceKelvin: 5200, liveviewMode: 'mjpeg', autoPreview: false, liveviewRetryAttempts: 1, shutterOffsetDelay: 0, inactivityTimeout: 30, screenMode: 'windowed', mirrorLivePreview: false, mirrorPostSessionPreview: false }
   private smSelect!: HTMLSelectElement
   private serverInput!: HTMLInputElement
   private cameraSelect!: HTMLSelectElement
@@ -136,6 +138,10 @@ export class Settings {
   private pollingBtn!: HTMLButtonElement
   private autoPreviewTrack!: HTMLDivElement
   private autoPreviewThumb!: HTMLDivElement
+  private mirrorLiveTrack!: HTMLDivElement
+  private mirrorLiveThumb!: HTMLDivElement
+  private mirrorPostSessionTrack!: HTMLDivElement
+  private mirrorPostSessionThumb!: HTMLDivElement
   private wbSelect!: HTMLSelectElement
   private wbKelvinRow!: HTMLDivElement
   private wbKelvinInput!: HTMLInputElement
@@ -612,6 +618,58 @@ export class Settings {
     retryRow.appendChild(retryInput)
 
     liveviewBox.appendChild(retryRow)
+
+    const mirrorLiveRow = document.createElement('div')
+    mirrorLiveRow.style.cssText = 'display: flex; padding: 0.75rem 1rem; background: #111; align-items: center; justify-content: space-between; border-top: 1px solid #252525;'
+
+    const mirrorLiveLabel = document.createElement('label')
+    mirrorLiveLabel.textContent = 'Mirror live preview'
+    mirrorLiveLabel.style.cssText = 'font-size: 0.875rem; color: #ccc; font-weight: 500; cursor: pointer;'
+    mirrorLiveRow.appendChild(mirrorLiveLabel)
+
+    this.mirrorLiveTrack = document.createElement('div')
+    this.mirrorLiveThumb = document.createElement('div')
+    const applyMirrorLive = (on: boolean) => {
+      this.mirrorLiveTrack.style.cssText = `position: relative; width: 44px; height: 24px; border-radius: 12px; cursor: pointer; transition: background 150ms; flex-shrink: 0; background: ${on ? '#fff' : '#333'};`
+      this.mirrorLiveThumb.style.cssText = `position: absolute; top: 3px; left: ${on ? '23px' : '3px'}; width: 18px; height: 18px; border-radius: 50%; background: ${on ? '#000' : '#888'}; transition: left 150ms;`
+    }
+    applyMirrorLive(!!this.settings.mirrorLivePreview)
+    this.mirrorLiveTrack.appendChild(this.mirrorLiveThumb)
+    const toggleMirrorLive = () => {
+      this.settings.mirrorLivePreview = !this.settings.mirrorLivePreview
+      applyMirrorLive(!!this.settings.mirrorLivePreview)
+      this.markDirty()
+    }
+    this.mirrorLiveTrack.addEventListener('click', toggleMirrorLive)
+    mirrorLiveLabel.addEventListener('click', toggleMirrorLive)
+    mirrorLiveRow.appendChild(this.mirrorLiveTrack)
+    liveviewBox.appendChild(mirrorLiveRow)
+
+    const mirrorPostSessionRow = document.createElement('div')
+    mirrorPostSessionRow.style.cssText = 'display: flex; padding: 0.75rem 1rem; background: #191919; align-items: center; justify-content: space-between; border-top: 1px solid #252525;'
+
+    const mirrorPostSessionLabel = document.createElement('label')
+    mirrorPostSessionLabel.textContent = 'Mirror post-session preview'
+    mirrorPostSessionLabel.style.cssText = 'font-size: 0.875rem; color: #ccc; font-weight: 500; cursor: pointer;'
+    mirrorPostSessionRow.appendChild(mirrorPostSessionLabel)
+
+    this.mirrorPostSessionTrack = document.createElement('div')
+    this.mirrorPostSessionThumb = document.createElement('div')
+    const applyMirrorPostSession = (on: boolean) => {
+      this.mirrorPostSessionTrack.style.cssText = `position: relative; width: 44px; height: 24px; border-radius: 12px; cursor: pointer; transition: background 150ms; flex-shrink: 0; background: ${on ? '#fff' : '#333'};`
+      this.mirrorPostSessionThumb.style.cssText = `position: absolute; top: 3px; left: ${on ? '23px' : '3px'}; width: 18px; height: 18px; border-radius: 50%; background: ${on ? '#000' : '#888'}; transition: left 150ms;`
+    }
+    applyMirrorPostSession(!!this.settings.mirrorPostSessionPreview)
+    this.mirrorPostSessionTrack.appendChild(this.mirrorPostSessionThumb)
+    const toggleMirrorPostSession = () => {
+      this.settings.mirrorPostSessionPreview = !this.settings.mirrorPostSessionPreview
+      applyMirrorPostSession(!!this.settings.mirrorPostSessionPreview)
+      this.markDirty()
+    }
+    this.mirrorPostSessionTrack.addEventListener('click', toggleMirrorPostSession)
+    mirrorPostSessionLabel.addEventListener('click', toggleMirrorPostSession)
+    mirrorPostSessionRow.appendChild(this.mirrorPostSessionTrack)
+    liveviewBox.appendChild(mirrorPostSessionRow)
 
     col3.appendChild(liveviewBox)
 
@@ -1562,6 +1620,20 @@ export class Settings {
       this.autoPreviewTrack.style.background = on ? '#fff' : '#333'
       this.autoPreviewThumb.style.left = on ? '23px' : '3px'
       this.autoPreviewThumb.style.background = on ? '#000' : '#888'
+    }
+
+    if (this.mirrorLiveTrack) {
+      const on = !!this.settings.mirrorLivePreview
+      this.mirrorLiveTrack.style.background = on ? '#fff' : '#333'
+      this.mirrorLiveThumb.style.left = on ? '23px' : '3px'
+      this.mirrorLiveThumb.style.background = on ? '#000' : '#888'
+    }
+
+    if (this.mirrorPostSessionTrack) {
+      const on = !!this.settings.mirrorPostSessionPreview
+      this.mirrorPostSessionTrack.style.background = on ? '#fff' : '#333'
+      this.mirrorPostSessionThumb.style.left = on ? '23px' : '3px'
+      this.mirrorPostSessionThumb.style.background = on ? '#000' : '#888'
     }
 
     if (this.passcodeInput) {
