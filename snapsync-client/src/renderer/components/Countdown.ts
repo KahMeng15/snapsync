@@ -24,7 +24,7 @@ export class CountdownUI {
     }
 
     this.messageEl.textContent = message || ''
-    const prepTick = Math.ceil(prepAt)
+    const prepTick = Math.min(seconds, Math.ceil(prepAt))
     for (let i = seconds; i > 0; i--) {
       if (signal?.aborted) return cleanup()
       if (pauseCheck) await pauseCheck()

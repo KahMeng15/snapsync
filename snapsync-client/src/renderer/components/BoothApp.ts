@@ -1532,16 +1532,20 @@ export class BoothApp {
       this.captureProgressText.textContent = `Shot ${i + 1} of ${photoCount}`
 
       let prepDone = false
-      let prepPromise: Promise<void> | null = null
+      let capturePromise: Promise<{ success: boolean; path?: string; error?: string }> | null = null
       const tCountdownStart = Date.now()
 
       const offset = this.settingsData.shutterOffsetDelay || 0
-      const onPrep = offset > 0 ? () => {
+      const onPrep = (this.cameraMode === 'dslr' && offset > 0) ? () => {
         if (!prepDone) {
           prepDone = true
-          console.log(`[BoothApp] ⏱ Shutter offset: starting prep ${offset}s before 0 at t+${Date.now() - tCountdownStart} ms`)
-          prepPromise = this.prepDslrCapture()
-          prepPromise.catch((err) => console.error('[BoothApp] prepDslrCapture failed:', err))
+          console.log(`[BoothApp] ⏱ Shutter offset: launching DSLR capture early (${offset}s before 0) at t+${Date.now() - tCountdownStart} ms`)
+          capturePromise = (async () => {
+            await this.prepDslrCapture().catch((err) => console.error('[BoothApp] prepDslrCapture failed:', err))
+            const p = window.snapsync?.capture({ liveviewStopped: true })
+            if (!p) return { success: false, error: 'IPC bridge unavailable' }
+            return await p
+          })()
         }
       } : undefined
 
@@ -1565,25 +1569,25 @@ export class BoothApp {
       const tCountdownEnd = Date.now()
       console.log(`[BoothApp] ⏱ COUNTDOWN = 0 at t+${tCountdownEnd - tCountdownStart} ms`)
 
+      if (!this.settingsData.disableShutterCue) {
+        this.audio.playShutter()
+        this.flashWhite().catch(() => {})
+      }
+      this.showProcessingOverlay()
+
       let result: { success: boolean; path?: string; error?: string }
 
       if (this.cameraMode === 'dslr') {
-        // If offset is 0, prep wasn't fired during countdown — do it now
-        if (offset === 0) {
-          console.log(`[BoothApp] ⏱ Starting prepDslrCapture at t+${Date.now() - tCountdownStart} ms`)
-          prepPromise = this.prepDslrCapture()
-          prepDone = true
+        if (!capturePromise) {
+          console.log(`[BoothApp] ⏱ Starting captureDslrShot() at count 0 (offset was 0) at t+${Date.now() - tCountdownStart} ms`)
+          result = await this.captureDslrShot(false)
+        } else {
+          console.log(`[BoothApp] ⏱ Awaiting pre-launched capture at count 0 at t+${Date.now() - tCountdownStart} ms`)
+          result = await capturePromise
         }
-        // Await prep completion before firing shutter
-        if (prepPromise !== null) {
-          await prepPromise.catch(() => {})
-          prepPromise = null
-          console.log(`[BoothApp] ⏱ prepDslrCapture DONE at t+${Date.now() - tCountdownStart} ms`)
-        }
-        console.log(`[BoothApp] ⏱ Calling captureDslrShot() at t+${Date.now() - tCountdownStart} ms`)
-        result = await this.captureDslrShot(prepDone)
-        console.log(`[BoothApp] ⏱ captureDslrShot() returned at t+${Date.now() - tCountdownStart} ms`)
+        this.hideProcessingOverlay()
       } else {
+        this.hideProcessingOverlay()
         result = await this.camera.captureStill()
       }
 
@@ -1591,12 +1595,6 @@ export class BoothApp {
 
       if (result?.success && result.path) {
         paths.push(result.path)
-        // Webcam capture is instant so sound+flash happens here;
-        // DSLR captureDslrShot already played it optimistically before download.
-        if (this.cameraMode !== 'dslr' && !this.settingsData.disableShutterCue) {
-          this.audio.playShutter()
-          await this.flashWhite()
-        }
         this.stateDisplay.textContent = ''
 
         if (this.settingsData.postCapturePreview > 0) {
@@ -1742,13 +1740,18 @@ export class BoothApp {
       this.captureProgressText.textContent = `Retake Photo ${targetIndex + 1}`
 
       let prepDone = false
-      let prepPromise: Promise<void> | null = null
+      let capturePromise: Promise<{ success: boolean; path?: string; error?: string }> | null = null
       const offset = this.settingsData.shutterOffsetDelay || 0
-      const onPrep = offset > 0 ? () => {
+      const onPrep = (this.cameraMode === 'dslr' && offset > 0) ? () => {
         if (!prepDone) {
           prepDone = true
-          prepPromise = this.prepDslrCapture()
-          prepPromise.catch(() => {})
+          console.log(`[BoothApp] ⏱ Retake shutter offset: launching DSLR capture early (${offset}s before 0)`)
+          capturePromise = (async () => {
+            await this.prepDslrCapture().catch(() => {})
+            const p = window.snapsync?.capture({ liveviewStopped: true })
+            if (!p) return { success: false, error: 'IPC bridge unavailable' }
+            return await p
+          })()
         }
       } : undefined
 
@@ -1770,16 +1773,23 @@ export class BoothApp {
         countdown: undefined
       })
 
+      if (!this.settingsData.disableShutterCue) {
+        this.audio.playShutter()
+        this.flashWhite().catch(() => {})
+      }
+      this.showProcessingOverlay()
+
       let result: { success: boolean; path?: string; error?: string }
 
       if (this.cameraMode === 'dslr') {
-        if (offset === 0) {
-          prepPromise = this.prepDslrCapture()
-          prepDone = true
+        if (!capturePromise) {
+          result = await this.captureDslrShot(false)
+        } else {
+          result = await capturePromise
         }
-        if (prepPromise !== null) await prepPromise.catch(() => {})
-        result = await this.captureDslrShot(prepDone)
+        this.hideProcessingOverlay()
       } else {
+        this.hideProcessingOverlay()
         result = await this.camera.captureStill()
       }
 
@@ -1947,8 +1957,7 @@ export class BoothApp {
    */
   private async prepDslrCapture(): Promise<void> {
     console.log('[BoothApp] prepDslrCapture() — stopping liveview (keep last frame frozen) + camera liveview early')
-    this.dslrPreview.element.style.filter = 'blur(8px)'
-    this.dslrPreview.element.style.transition = 'filter 0.3s ease'
+    this.dslrPreview.element.style.filter = 'none'
     await this.dslrPreview.stop(true)
     await window.snapsync?.prepDslrCapture()
   }
@@ -1971,10 +1980,8 @@ export class BoothApp {
       return { success: false, error: 'IPC bridge unavailable' }
     }
 
-    // Play shutter sound + flash 1 s after the processing overlay appears
-    // (gives the camera time to begin the capture before we cue the user)
+    // Play shutter sound + flash without arbitrary delay
     if (!this.settingsData.disableShutterCue) {
-      await this.delay(1000)
       this.audio.playShutter()
       this.flashWhite().catch(() => {})
     }
