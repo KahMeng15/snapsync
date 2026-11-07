@@ -28,7 +28,7 @@ body {
   background-color: var(--color-bg);
 }
 
-@media (max-width: 768px) {
+@media (max-width: 767px) {
   body.has-bottom-nav #app {
     padding-bottom: 60px; /* Space for the bottom navbar */
   }

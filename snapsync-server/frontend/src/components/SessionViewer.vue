@@ -39,6 +39,16 @@
             />
           </div>
         </div>
+        <div v-else-if="props.session.inProgress || !props.session.photos || props.session.photos.length === 0" class="empty-state in-progress-session-box">
+          <div class="app-spinner" style="margin: 0 auto 1rem; width: 40px; height: 40px;"></div>
+          <h3 style="margin: 0 0 0.5rem; font-size: 1.15rem; font-weight: 600;">Session In Progress</h3>
+          <p style="color: var(--color-text-sub); max-width: 420px; margin: 0 auto 1.5rem; font-size: 0.9rem; line-height: 1.5;">
+            Photos are currently being taken or uploaded by the booth. The QR code and share link are active and ready to be scanned!
+          </p>
+          <AppButton variant="primary" @click="showPrimaryQr" style="padding: 0.75rem 1.75rem; font-size: 0.95rem;">
+            Show QR Code Now
+          </AppButton>
+        </div>
         <div v-else class="empty-state">
           <p>No framed photos available. Please ensure you have run the Backfill process for this frame.</p>
         </div>
@@ -391,6 +401,8 @@ const displayPhotos = computed(() => {
   return props.session.photos
 })
 
+let inProgressPoll: any = null
+
 onMounted(async () => {
   document.body.style.overflow = 'hidden'
   if (props.eventId) {
@@ -409,10 +421,32 @@ onMounted(async () => {
   }
   await fetchShares()
   await fetchEmailHistory()
+
+  if (props.session.inProgress || !props.session.photos?.length) {
+    inProgressPoll = setInterval(async () => {
+      try {
+        const { data } = await axios.get(`/api/admin/events/${props.eventId}/photos`)
+        const updated = data.sessions?.find((s: any) => s.sessionId === props.session.sessionId)
+        if (updated && updated.photos && updated.photos.length > 0) {
+          props.session.photos = updated.photos
+          props.session.photoCount = updated.photoCount
+          props.session.inProgress = false
+          if (inProgressPoll) {
+            clearInterval(inProgressPoll)
+            inProgressPoll = null
+          }
+          if (activeFrames.value.length > 0) {
+            await fetchFramedPhotos()
+          }
+        }
+      } catch {}
+    }, 2500)
+  }
 })
 
 onUnmounted(() => {
   document.body.style.overflow = ''
+  if (inProgressPoll) clearInterval(inProgressPoll)
 })
 
 async function fetchShares() {

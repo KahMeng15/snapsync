@@ -31,6 +31,7 @@ declare global {
       // ----------------------------------------------------------------
       // Upload
       // ----------------------------------------------------------------
+      reserveSession: (sessionId: string) => Promise<{ success: boolean; shareId?: string; shareUrl?: string }>
       uploadPhotos: (data: {
         sessionId: string
         imagePaths: string[]

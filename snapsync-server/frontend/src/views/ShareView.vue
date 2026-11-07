@@ -37,6 +37,14 @@
         </div>
 
         <div class="photos-container" :class="{ 'has-single-photo': allPhotos.length === 1 }">
+          <div v-if="session.photos.length === 0" class="guest-processing-box">
+            <div class="app-spinner" style="margin: 0 auto 1.5rem; width: 44px; height: 44px;"></div>
+            <h2 style="font-size: 1.3rem; margin-bottom: 0.5rem; font-weight: 700; color: var(--color-text);">Photos are on the way!</h2>
+            <p style="color: var(--color-text-sub); max-width: 380px; margin: 0 auto; line-height: 1.5; font-size: 0.95rem;">
+              Your session is currently in progress or uploading from the booth. Stay right here — your photos will appear automatically!
+            </p>
+          </div>
+
           <section v-if="framedPhotos.length > 0" class="photo-section" :class="{ 'single-item-section': framedPhotos.length === 1 }">
             <div v-if="showSectionTitles" class="section-header">
               <h2 class="section-title">Framed Photos</h2>
@@ -305,8 +313,11 @@ const expiryText = computed(() => {
   return `Link expires on ${d.toLocaleString(undefined, opts)}`
 })
 
+let sharePollInterval: any = null
+
 onUnmounted(() => {
   if (heroInterval) window.clearInterval(heroInterval)
+  if (sharePollInterval) clearInterval(sharePollInterval)
   window.removeEventListener('keydown', handleKeydown)
 })
 
@@ -352,6 +363,28 @@ onMounted(async () => {
             heroIndex.value = (heroIndex.value + 1) % animationPhotos.value.length
           }
         }, 500)
+      }
+
+      if (session.value.photos.length === 0) {
+        sharePollInterval = setInterval(async () => {
+          try {
+            const res = await axios.get(`/api/share/${token}`)
+            if (res.data && res.data.photos && res.data.photos.length > 0) {
+              session.value = res.data
+              if (sharePollInterval) {
+                clearInterval(sharePollInterval)
+                sharePollInterval = null
+              }
+              if (animationPhotos.value.length >= 2 && !heroInterval) {
+                heroInterval = window.setInterval(() => {
+                  if (animationPhotos.value.length >= 2) {
+                    heroIndex.value = (heroIndex.value + 1) % animationPhotos.value.length
+                  }
+                }, 500)
+              }
+            }
+          } catch {}
+        }, 2000)
       }
     }
   } catch {
@@ -873,6 +906,15 @@ async function downloadAll() {
   justify-content: center;
   z-index: 1000;
   gap: 1rem;
+}
+
+.guest-processing-box {
+  text-align: center;
+  padding: 4rem 1.5rem;
+  background: var(--color-surface, #1e1e1e);
+  border: 1px solid var(--color-border, #333);
+  border-radius: var(--radius-lg, 12px);
+  margin: 1.5rem 0;
 }
 
 .lightbox-close {

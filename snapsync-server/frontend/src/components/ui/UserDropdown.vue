@@ -142,7 +142,7 @@ async function handleLogout() {
   background: color-mix(in srgb, var(--color-error) 15%, transparent);
 }
 
-@media (max-width: 768px) {
+@media (max-width: 767px) {
   .user-email-text {
     display: none;
   }
@@ -153,7 +153,7 @@ async function handleLogout() {
     margin-top: 0;
   }
 }
-@media (min-width: 769px) {
+@media (min-width: 768px) {
   .user-icon.hide-on-desktop {
     display: none;
   }

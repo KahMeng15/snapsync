@@ -16,6 +16,23 @@
             <label>Event Date</label>
             <input type="date" v-model="eventSettings.date" class="text-input" />
           </div>
+          <div class="field-row">
+            <label>Event State</label>
+            <div class="state-select-wrapper">
+              <select v-model="eventSettings.status" class="custom-select">
+                <option value="upcoming">Upcoming</option>
+                <option value="active">Active</option>
+                <option value="completed">Completed</option>
+                <option value="inactive">Inactive</option>
+              </select>
+              <div class="state-desc-helper">
+                <span v-if="eventSettings.status === 'upcoming'">Upcoming: Pre-event setup. Photo booth pairing is paused until active.</span>
+                <span v-else-if="eventSettings.status === 'active'">Active: Event is live! Booth connects and takes photos.</span>
+                <span v-else-if="eventSettings.status === 'completed'">Completed: Event finished. Booth disconnected; gallery remains accessible.</span>
+                <span v-else-if="eventSettings.status === 'inactive'">Inactive: Event is paused/disabled. Booth cannot connect.</span>
+              </div>
+            </div>
+          </div>
           <div class="field-row-col">
             <label>Organizer</label>
             <input type="text" v-model="eventSettings.organizer" class="text-input" placeholder="Faculty of ..." style="width: 100%; min-width: unset;" />
@@ -94,6 +111,49 @@
           <div class="field-row" v-if="eventSettings.expiryType === 'absolute'">
             <label>Date & Time</label>
             <input type="datetime-local" v-model="eventSettings.expiryValue" class="text-input datetime-input" />
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-header-flex" style="margin-bottom: 0.5rem;">
+          <div>
+            <h2>Event Data & Backup</h2>
+            <p class="card-desc" style="margin-bottom: 0;">Download a complete ZIP package of all images, frames, and settings, or import an event backup.</p>
+          </div>
+        </div>
+        <div class="settings-box">
+          <div class="field-row backup-row">
+            <div class="backup-info">
+              <label style="font-weight: 600; color: var(--color-text);">Export Event Data (ZIP)</label>
+              <p class="backup-hint">
+                Downloads a ZIP file containing all original photos, framed images, frame configurations, and database settings for this event.
+              </p>
+            </div>
+            <AppButton variant="primary" size="sm" @click="downloadEventZip" :disabled="isDownloading">
+              <svg v-if="!isDownloading" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 0.35rem;">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+              </svg>
+              <span>{{ isDownloading ? 'Preparing ZIP...' : 'Download Event ZIP' }}</span>
+            </AppButton>
+          </div>
+          <div class="field-row backup-row">
+            <div class="backup-info">
+              <label style="font-weight: 600; color: var(--color-text);">Import Event Backup (ZIP)</label>
+              <p class="backup-hint">
+                Import or restore an event package from a previously downloaded ZIP archive.
+              </p>
+            </div>
+            <AppButton variant="secondary" size="sm" @click="openImportModal">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 0.35rem;">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="17 8 12 3 7 8"></polyline>
+                <line x1="12" y1="3" x2="12" y2="15"></line>
+              </svg>
+              <span>Import Event ZIP</span>
+            </AppButton>
           </div>
         </div>
       </section>
@@ -266,6 +326,64 @@
       </div>
 
     </div>
+
+    <!-- Import Event Package Modal -->
+    <AppModal v-model="showImportModal" title="Import Event Package">
+      <div class="import-modal-content">
+        <p style="font-size: var(--text-sm); color: var(--color-text-sub); margin-bottom: 1rem; line-height: 1.5;">
+          Select a Snapsync event backup ZIP file to import. The archive restores all frame configurations, original photos, and event database settings.
+        </p>
+
+        <div class="import-dropzone" :class="{ 'has-file': !!selectedZipFile }" @click="triggerFileInput">
+          <input
+            ref="fileInputRef"
+            type="file"
+            accept=".zip,application/zip"
+            style="display: none;"
+            @change="handleFileChange"
+          />
+          <div v-if="!selectedZipFile" class="dropzone-placeholder">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 0.5rem; color: var(--color-text-sub);">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="17 8 12 3 7 8"></polyline>
+              <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+            <div style="font-weight: 500;">Click to select an event ZIP file</div>
+            <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: 0.25rem;">Supports backups exported from Snapsync (up to 1GB)</div>
+          </div>
+          <div v-else class="dropzone-file-info">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+            </svg>
+            <div style="flex: 1; text-align: left; margin-left: 0.75rem; overflow: hidden;">
+              <strong style="display:block; font-size: var(--text-sm); text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">{{ selectedZipFile.name }}</strong>
+              <span style="font-size: var(--text-xs); color: var(--color-text-sub);">{{ formatBytes(selectedZipFile.size) }}</span>
+            </div>
+            <button type="button" @click.stop="selectedZipFile = null" class="btn-clear-file" title="Remove file">&times;</button>
+          </div>
+        </div>
+
+        <div style="margin-top: 1rem;">
+          <label class="checkbox-label" style="display: flex; align-items: flex-start; gap: 0.5rem; font-size: var(--text-sm); cursor: pointer;">
+            <input type="checkbox" v-model="importOverwrite" style="margin-top: 0.2rem;" />
+            <div>
+              <span>Overwrite existing event if matching ID is found</span>
+              <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: 0.15rem;">
+                If unchecked, an event with an existing ID will be safely imported as a new copy.
+              </div>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <template #footer>
+        <AppButton variant="secondary" @click="showImportModal = false" :disabled="importing">Cancel</AppButton>
+        <AppButton variant="primary" @click="executeImport" :disabled="!selectedZipFile || importing">
+          {{ importing ? 'Importing...' : 'Upload & Import' }}
+        </AppButton>
+      </template>
+    </AppModal>
 
     <!-- Reset Booth OTP Modal -->
     <AppModal v-model="showResetModal" title="Reset Booth OTP Code">
@@ -496,9 +614,100 @@ watch([relativeNumber, relativeUnit], ([num, unit]) => {
   }
 })
 
+const isDownloading = ref(false)
+const showImportModal = ref(false)
+const selectedZipFile = ref<File | null>(null)
+const importOverwrite = ref(false)
+const importing = ref(false)
+const fileInputRef = ref<HTMLInputElement | null>(null)
+
+function openImportModal() {
+  selectedZipFile.value = null
+  importOverwrite.value = false
+  showImportModal.value = true
+}
+
+function triggerFileInput() {
+  fileInputRef.value?.click()
+}
+
+function handleFileChange(e: Event) {
+  const target = e.target as HTMLInputElement
+  if (target.files && target.files.length > 0) {
+    selectedZipFile.value = target.files[0]
+  }
+}
+
+function formatBytes(bytes: number) {
+  if (bytes === 0) return '0 Bytes'
+  const k = 1024
+  const sizes = ['Bytes', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+}
+
+async function downloadEventZip() {
+  if (isDownloading.value) return
+  isDownloading.value = true
+  toast.info('Preparing ZIP package... This might take a few moments for large galleries.')
+  try {
+    const response = await axios.get(`/api/admin/events/${eventId.value}/export`, {
+      responseType: 'blob'
+    })
+    const blob = new Blob([response.data], { type: 'application/zip' })
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    const safeName = (event.value?.name || 'event').replace(/[^a-zA-Z0-9_-]/g, '_')
+    link.setAttribute('download', `${safeName}_${eventId.value}_data.zip`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+    toast.success('Event ZIP downloaded successfully!')
+  } catch (err: any) {
+    console.error('Failed to export event:', err)
+    toast.error('Failed to download event ZIP')
+  } finally {
+    isDownloading.value = false
+  }
+}
+
+async function executeImport() {
+  if (!selectedZipFile.value) return
+  importing.value = true
+  const formData = new FormData()
+  formData.append('file', selectedZipFile.value)
+  if (importOverwrite.value) {
+    formData.append('overwrite', 'true')
+  }
+
+  try {
+    const { data } = await axios.post('/api/admin/events/import', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+    toast.success('Event package imported successfully!')
+    showImportModal.value = false
+    selectedZipFile.value = null
+    if (data.eventId) {
+      if (data.eventId === eventId.value) {
+        window.location.reload()
+      } else {
+        router.push(`/events/${data.eventId}`)
+      }
+    }
+  } catch (err: any) {
+    console.error('Import error:', err)
+    toast.error(err.response?.data?.error || 'Failed to import event ZIP')
+  } finally {
+    importing.value = false
+  }
+}
+
 const eventSettings = ref({
   name: '',
   date: '',
+  status: 'active',
   expiryType: 'none',
   expiryValue: '',
   organizer: '',
@@ -545,6 +754,7 @@ onMounted(async () => {
     eventSettings.value = {
       name: ev.name || '',
       date: ev.date || '',
+      status: ev.status === 'ended' ? 'completed' : (ev.status || 'active'),
       expiryType: ev.expiry_type || 'none',
       expiryValue: ev.expiry_value || '',
       organizer: ev.organizer || '',
@@ -604,9 +814,10 @@ function goBack() {
 async function saveSettings() {
   settingsSaving.value = true
   try {
-    await axios.patch(`/api/admin/events/${eventId.value}`, {
+    const { data } = await axios.patch(`/api/admin/events/${eventId.value}`, {
       name: eventSettings.value.name,
       date: eventSettings.value.date,
+      status: eventSettings.value.status,
       expiryType: eventSettings.value.expiryType,
       expiryValue: eventSettings.value.expiryValue,
       organizer: eventSettings.value.organizer,
@@ -621,6 +832,11 @@ async function saveSettings() {
       emailBody: eventEmail.value.emailBody || null,
       emailFromName: eventEmail.value.emailFromName || null
     })
+    if (data?.event && event.value) {
+      event.value.status = data.event.status
+    } else if (event.value) {
+      event.value.status = eventSettings.value.status
+    }
     toast.success('Settings saved successfully')
   } catch {
     toast.error('Failed to save settings')
@@ -930,4 +1146,88 @@ async function saveSettings() {
   border-radius: var(--radius-md);
 }
 
+.state-select-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  align-items: flex-end;
+}
+@media (max-width: 768px) {
+  .state-select-wrapper {
+    align-items: stretch;
+  }
+}
+.state-desc-helper {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  line-height: 1.4;
+  max-width: 320px;
+  text-align: right;
+}
+@media (max-width: 768px) {
+  .state-desc-helper {
+    text-align: left;
+    max-width: unset;
+  }
+}
+
+.backup-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.25rem;
+}
+.backup-info {
+  flex: 1;
+  padding-right: 1.5rem;
+}
+.backup-hint {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  margin: 0.25rem 0 0;
+  line-height: 1.4;
+}
+
+.import-modal-content {
+  padding: 0.25rem 0;
+}
+.import-dropzone {
+  border: 2px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 2rem 1rem;
+  text-align: center;
+  cursor: pointer;
+  background: var(--color-surface);
+  transition: all 0.15s ease;
+}
+.import-dropzone:hover {
+  border-color: var(--color-primary, #3b82f6);
+}
+.import-dropzone.has-file {
+  border-style: solid;
+  border-color: #22c55e;
+  padding: 1.25rem 1rem;
+}
+.dropzone-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.dropzone-file-info {
+  display: flex;
+  align-items: center;
+}
+.btn-clear-file {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  color: var(--color-text-sub);
+  cursor: pointer;
+  padding: 0 0.5rem;
+  line-height: 1;
+}
+.btn-clear-file:hover {
+  color: var(--color-error, #ef4444);
+}
 </style>

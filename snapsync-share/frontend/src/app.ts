@@ -127,6 +127,32 @@ function render(token: string) {
   container.innerHTML = '';
 
   const totalPhotos = sessionData!.photos.length;
+
+  if (totalPhotos === 0) {
+    container.innerHTML = `
+      <div style="text-align: center; padding: 4rem 1.5rem; background: var(--color-surface, #1e1e1e); border: 1px solid var(--color-border, #333); border-radius: 12px; margin: 1.5rem 0;">
+        <div class="app-spinner" style="width: 40px; height: 40px; margin: 0 auto 1.5rem;"></div>
+        <h2 style="font-size: 1.3rem; margin-bottom: 0.5rem; font-weight: 700;">Photos are on the way!</h2>
+        <p style="color: var(--color-text-sub, #888); max-width: 380px; margin: 0 auto; line-height: 1.5; font-size: 0.95rem;">
+          Your session is currently in progress or uploading from the booth. Stay right here — your photos will appear automatically!
+        </p>
+      </div>
+    `;
+    $('download-all-btn')?.classList.add('hidden');
+    setTimeout(async () => {
+      try {
+        const res = await fetch(`${basePath}/api/share/${token}`);
+        const data = await res.json();
+        if (data && data.photos && data.photos.length > 0) {
+          sessionData = data;
+          render(token);
+        } else if (data && !data.error && !data.expired) {
+          render(token);
+        }
+      } catch {}
+    }, 2000);
+    return;
+  }
   if (totalPhotos <= 1) {
     document.body.classList.add('single-photo-mode');
     $('share-page')?.classList.add('single-photo-mode');

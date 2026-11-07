@@ -57,6 +57,12 @@ router.post('/session/reserve', boothAuthMiddleware, async (req: Request, res: R
     const shareId = reservePhotoSession(sessionId, eventId)
     const baseUrl = process.env.VITE_SHARE_BASE_URL || (process.env.SHARE_BASE_URL ? `${process.env.SHARE_BASE_URL.replace(/\/$/, '')}/share` : `${req.protocol}://${req.get('host')}/share`);
     const shareUrl = `${baseUrl.replace(/\/$/, '')}/${shareId}`
+
+    const io = req.app.get('io')
+    if (io) {
+      io.emit('new-media', { eventId, sessionId, shareId, shareUrl, inProgress: true })
+    }
+
     res.json({ shareId, shareUrl, sessionId })
   } catch (error: any) {
     logger.error(`Session reserve error: ${error.message}`)

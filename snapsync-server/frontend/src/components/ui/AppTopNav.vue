@@ -216,6 +216,18 @@ const currentRoute = computed(() => {
   background: color-mix(in srgb, var(--color-success) 15%, transparent);
   color: var(--color-success);
 }
+.status-upcoming {
+  background: color-mix(in srgb, #3b82f6 15%, transparent);
+  color: #3b82f6;
+}
+.status-completed {
+  background: color-mix(in srgb, #a855f7 15%, transparent);
+  color: #a855f7;
+}
+.status-inactive {
+  background: color-mix(in srgb, var(--color-text-sub, #64748b) 20%, transparent);
+  color: var(--color-text-sub, #64748b);
+}
 .status-ended {
   background: color-mix(in srgb, var(--color-error) 15%, transparent);
   color: var(--color-error);
@@ -225,13 +237,13 @@ const currentRoute = computed(() => {
   color: var(--color-warning);
 }
 
-@media (min-width: 1200px) {
+@media (min-width: 768px) {
   .remote-icon-nav.hide-on-desktop {
     display: none;
   }
 }
 
-@media (max-width: 768px) {
+@media (max-width: 767px) {
   .nav-right {
     position: fixed;
     bottom: 0;

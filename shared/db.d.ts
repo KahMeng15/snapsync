@@ -54,7 +54,9 @@ export declare function updateEventById(id: string, name: string, date: string, 
     expiryValue?: string;
     organizer?: string;
     contactInfo?: string;
+    status?: string;
 }): void;
+export declare function updateEventStatus(id: string, status: string): void;
 export declare function updateEventSettingsById(id: string, settings: {
     photoCount: number;
     countdown: number;
@@ -362,3 +364,20 @@ export declare function updateEventEmailSettings(eventId: string, data: {
     emailEnabled?: number;
 }): void;
 export declare function resolveEmailTemplate(event: any, globals: any, field: 'email_subject' | 'email_body' | 'email_from_name'): string | null;
+export interface EventExportPackage {
+    version: number;
+    exportedAt: string;
+    event: any;
+    photoSessions?: any[];
+    sessionShares?: any[];
+    eventShares?: any[];
+    emailSends?: any[];
+    operators?: any[];
+}
+export declare function getEventFullExportData(eventId: string): EventExportPackage | null;
+export declare function importEventData(exportData: any, options?: {
+    overwrite?: boolean;
+}): {
+    targetEventId: any;
+    originalEventId: any;
+};

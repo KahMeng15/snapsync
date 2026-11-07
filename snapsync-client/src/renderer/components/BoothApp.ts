@@ -1522,6 +1522,10 @@ export class BoothApp {
     this.currentSessionId = `session_${Date.now()}`
     this.currentSessionUploaded = false
     this.currentPaths = paths
+    this.currentFullState.shareUrl = ''
+    window.snapsync?.reserveSession(this.currentSessionId).catch((err: any) => {
+      console.warn('[BoothApp] Early session reserve failed:', err)
+    })
     const audioCtx = new AudioContext()
 
     this.sessionAbortController = new AbortController()

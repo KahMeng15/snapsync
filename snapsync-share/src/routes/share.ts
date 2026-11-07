@@ -221,6 +221,7 @@ router.get('/:token', async (req: Request, res: Response) => {
       eventDate: event.date,
       photoCount: photos.length,
       expiresAt: expiryDate ? expiryDate.toISOString() : null,
+      uploadStatus: sess?.upload_status || (photos.length > 0 ? 'complete' : 'reserved'),
       photos,
     })
   } catch (error: any) {

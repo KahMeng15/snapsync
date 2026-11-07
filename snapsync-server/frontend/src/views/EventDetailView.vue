@@ -78,13 +78,20 @@
           >
             <div class="session-thumb" :style="session.photoWidth && session.photoHeight ? { aspectRatio: `${session.photoWidth}/${session.photoHeight}` } : {}">
               <img
-                v-if="session.photos[session.photos.length - 1]?.thumbnail"
+                v-if="session.photos && session.photos.length > 0 && session.photos[session.photos.length - 1]?.thumbnail"
                 :src="baseUrl + session.photos[session.photos.length - 1].thumbnail"
                 :alt="'Session ' + session.sessionId"
                 class="thumb-img"
                 loading="lazy"
                 @load="$event.target.classList.add('loaded')"
               />
+              <div v-else-if="session.inProgress" class="thumb-in-progress">
+                <div class="in-progress-badge">IN PROGRESS</div>
+                <div class="in-progress-content">
+                  <span class="app-spinner inline-spinner" style="margin-right: 0;"></span>
+                  <span class="in-progress-text-sub">Waiting for upload...</span>
+                </div>
+              </div>
               <div v-else class="thumb-img thumb-skeleton skeleton-pulse"></div>
               <div class="session-check" :class="{ checked: selectedSessions.has(session.sessionId) }" @click.stop="toggleSelect(session.sessionId)">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
@@ -94,7 +101,9 @@
             </div>
             <div class="session-meta">
               <span class="session-time">{{ formatTime(session.createdAt) }}</span>
-              <span class="session-count">{{ session.photoCount }} photo{{ session.photoCount !== 1 ? 's' : '' }}</span>
+              <span class="session-count" :class="{ 'in-progress-status': session.inProgress }">
+                {{ session.inProgress ? 'Ready to Share (Uploading)' : `${session.photoCount} photo${session.photoCount !== 1 ? 's' : ''}` }}
+              </span>
             </div>
           </div>
           <div v-if="photoSessions.length === 0" class="empty-state">
@@ -254,7 +263,7 @@ const closePanelOnWide = () => {
 }
 
 onMounted(async () => {
-  wideMq = window.matchMedia('(min-width: 769px)')
+  wideMq = window.matchMedia('(min-width: 768px)')
   wideMq.addEventListener('change', closePanelOnWide)
 
   const eventId = route.params.id as string
@@ -543,19 +552,31 @@ function formatTime(ts: string) {
 .remote-sidebar {
   display: none !important;
 }
-@media (min-width: 1200px) {
+@media (min-width: 768px) {
   .dashboard-grid-full {
     display: grid;
-    grid-template-columns: 1fr 340px;
+    grid-template-columns: 1fr 320px;
     align-items: flex-start;
+    gap: 1rem;
+    padding: 1rem;
   }
   .remote-sidebar {
     display: flex !important;
     flex-direction: column;
     position: sticky;
-    top: 5rem;
+    top: 4.5rem;
     height: fit-content;
     align-self: flex-start;
+  }
+}
+@media (min-width: 1024px) {
+  .dashboard-grid-full {
+    grid-template-columns: 1fr 340px;
+    gap: 1.5rem;
+    padding: 1.5rem;
+  }
+  .remote-sidebar {
+    top: 5rem;
   }
 }
 </style>
@@ -601,6 +622,21 @@ function formatTime(ts: string) {
 .status-active {
   background: #1a3a2a;
   color: var(--color-success);
+}
+
+.status-upcoming {
+  background: #1e293b;
+  color: #3b82f6;
+}
+
+.status-completed {
+  background: #2e1065;
+  color: #c084fc;
+}
+
+.status-inactive {
+  background: #334155;
+  color: #94a3b8;
 }
 
 .status-ended {
@@ -839,6 +875,57 @@ function formatTime(ts: string) {
   animation: skeleton-pulse 1.5s ease-in-out infinite;
 }
 
+.thumb-in-progress {
+  width: 100%;
+  height: 100%;
+  background: var(--color-surface-alt, #1e1e1e);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  padding: 1rem;
+  box-sizing: border-box;
+}
+
+.in-progress-badge {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  background: var(--color-info, #2196f3);
+  color: #fff;
+  padding: 0.15rem 0.4rem;
+  border-radius: var(--radius-sm, 4px);
+  animation: pulse-glow 2s infinite;
+}
+
+@keyframes pulse-glow {
+  0% { opacity: 0.8; }
+  50% { opacity: 1; box-shadow: 0 0 8px rgba(33, 150, 243, 0.6); }
+  100% { opacity: 0.8; }
+}
+
+.in-progress-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  text-align: center;
+}
+
+.in-progress-text-sub {
+  font-size: 0.75rem;
+  color: var(--color-text-sub);
+}
+
+.in-progress-status {
+  color: var(--color-info, #2196f3) !important;
+  font-weight: 600;
+}
+
 .session-check {
   position: absolute;
   top: 0.375rem;
@@ -975,19 +1062,31 @@ function formatTime(ts: string) {
 .remote-sidebar {
   display: none !important;
 }
-@media (min-width: 1200px) {
+@media (min-width: 768px) {
   .dashboard-grid-full {
     display: grid;
-    grid-template-columns: 1fr 340px;
+    grid-template-columns: 1fr 320px;
     align-items: flex-start;
+    gap: 1rem;
+    padding: 1rem;
   }
   .remote-sidebar {
     display: flex !important;
     flex-direction: column;
     position: sticky;
-    top: 5rem;
+    top: 4.5rem;
     height: fit-content;
     align-self: flex-start;
+  }
+}
+@media (min-width: 1024px) {
+  .dashboard-grid-full {
+    grid-template-columns: 1fr 340px;
+    gap: 1.5rem;
+    padding: 1.5rem;
+  }
+  .remote-sidebar {
+    top: 5rem;
   }
 }
 </style>

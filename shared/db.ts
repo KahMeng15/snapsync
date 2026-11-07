@@ -35,7 +35,7 @@ db.exec(`
     date TEXT NOT NULL,
     description TEXT NOT NULL DEFAULT '',
     otp TEXT NOT NULL UNIQUE,
-    status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','ended')),
+    status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','ended','upcoming','completed','inactive')),
     photo_count INTEGER NOT NULL DEFAULT 4,
     countdown INTEGER NOT NULL DEFAULT 5,
     capture_interval INTEGER NOT NULL DEFAULT 1,
@@ -183,6 +183,65 @@ db.exec(`
   WHERE id = 1
 `)
 
+// Status CHECK constraint migration for existing DBs
+try {
+  const eventsTableInfo = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='events'").get() as { sql: string } | undefined
+  if (eventsTableInfo?.sql && !eventsTableInfo.sql.includes("'upcoming'")) {
+    db.pragma('foreign_keys = OFF')
+    db.exec(`
+      BEGIN TRANSACTION;
+      CREATE TABLE events_status_migrated (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        date TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        otp TEXT NOT NULL UNIQUE,
+        status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','ended','upcoming','completed','inactive')),
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        photo_count INTEGER NOT NULL DEFAULT 4,
+        countdown INTEGER NOT NULL DEFAULT 5,
+        capture_interval INTEGER NOT NULL DEFAULT 1,
+        post_capture_preview INTEGER NOT NULL DEFAULT 2,
+        dslr_iso TEXT NOT NULL DEFAULT 'auto',
+        dslr_shutterspeed TEXT NOT NULL DEFAULT 'auto',
+        dslr_aperture TEXT NOT NULL DEFAULT 'auto',
+        dslr_focus_mode TEXT NOT NULL DEFAULT 'auto',
+        dslr_whitebalance TEXT NOT NULL DEFAULT 'auto',
+        dslr_whitebalance_kelvin INTEGER NOT NULL DEFAULT 5200,
+        obfuscate_links INTEGER NOT NULL DEFAULT 0,
+        expiry_type TEXT NOT NULL DEFAULT 'none',
+        expiry_value TEXT NOT NULL DEFAULT '',
+        organizer TEXT NOT NULL DEFAULT '',
+        contact_info TEXT NOT NULL DEFAULT '',
+        share_originals INTEGER NOT NULL DEFAULT 1,
+        operator_password TEXT,
+        msg_homepage TEXT,
+        msg_countdown TEXT,
+        msg_post_session TEXT,
+        msg_share_title TEXT,
+        msg_order TEXT NOT NULL DEFAULT 'random',
+        email_subject TEXT,
+        email_body TEXT,
+        email_from_name TEXT,
+        email_enabled INTEGER NOT NULL DEFAULT 1
+      );
+      INSERT INTO events_status_migrated SELECT 
+        id, name, date, description, otp, status, created_at, photo_count, countdown, capture_interval,
+        post_capture_preview, dslr_iso, dslr_shutterspeed, dslr_aperture, dslr_focus_mode,
+        dslr_whitebalance, dslr_whitebalance_kelvin, obfuscate_links, expiry_type, expiry_value,
+        organizer, contact_info, share_originals, operator_password, msg_homepage, msg_countdown,
+        msg_post_session, msg_share_title, msg_order, email_subject, email_body, email_from_name, email_enabled
+      FROM events;
+      DROP TABLE events;
+      ALTER TABLE events_status_migrated RENAME TO events;
+      COMMIT;
+    `)
+    db.pragma('foreign_keys = ON')
+  }
+} catch (e: any) {
+  logger.error('Failed to migrate events status CHECK constraint', { error: e.message })
+}
+
 
 
 db.exec(`
@@ -326,7 +385,7 @@ const insertEvent = db.prepare(`
 `)
 
 const updateEvent = db.prepare(`
-  UPDATE events SET name = ?, date = ?, description = ?, photo_count = ?, countdown = ?, capture_interval = ?, post_capture_preview = ?, dslr_iso = ?, dslr_shutterspeed = ?, dslr_aperture = ?, dslr_focus_mode = ?, dslr_whitebalance = ?, dslr_whitebalance_kelvin = ?, obfuscate_links = ?, expiry_type = ?, expiry_value = ?, organizer = ?, contact_info = ? WHERE id = ?
+  UPDATE events SET name = ?, date = ?, description = ?, photo_count = ?, countdown = ?, capture_interval = ?, post_capture_preview = ?, dslr_iso = ?, dslr_shutterspeed = ?, dslr_aperture = ?, dslr_focus_mode = ?, dslr_whitebalance = ?, dslr_whitebalance_kelvin = ?, obfuscate_links = ?, expiry_type = ?, expiry_value = ?, organizer = ?, contact_info = ?, status = ? WHERE id = ?
 `)
 
 const updateEventSettings = db.prepare(`
@@ -434,7 +493,7 @@ export function createEvent(name: string, date: string, description: string, set
   return { id, otp }
 }
 
-export function updateEventById(id: string, name: string, date: string, description: string, settings?: { photoCount?: number; countdown?: number; captureInterval?: number; postCapturePreview?: number; dslrIso?: string; dslrShutterSpeed?: string; dslrAperture?: string; dslrFocusMode?: string; dslrWhiteBalance?: string; dslrWhiteBalanceKelvin?: number; obfuscateLinks?: number; expiryType?: string; expiryValue?: string; organizer?: string; contactInfo?: string }) {
+export function updateEventById(id: string, name: string, date: string, description: string, settings?: { photoCount?: number; countdown?: number; captureInterval?: number; postCapturePreview?: number; dslrIso?: string; dslrShutterSpeed?: string; dslrAperture?: string; dslrFocusMode?: string; dslrWhiteBalance?: string; dslrWhiteBalanceKelvin?: number; obfuscateLinks?: number; expiryType?: string; expiryValue?: string; organizer?: string; contactInfo?: string; status?: string }) {
   const existing = getEvent(id)!
   updateEvent.run(
     name, date, description,
@@ -453,8 +512,13 @@ export function updateEventById(id: string, name: string, date: string, descript
     settings?.expiryValue ?? existing.expiry_value,
     settings?.organizer ?? existing.organizer,
     settings?.contactInfo ?? existing.contact_info,
+    settings?.status ?? existing.status,
     id
   )
+}
+
+export function updateEventStatus(id: string, status: string) {
+  db.prepare('UPDATE events SET status = ? WHERE id = ?').run(status, id)
 }
 
 export function updateEventSettingsById(id: string, settings: { photoCount: number; countdown: number; captureInterval: number; postCapturePreview: number; dslrIso: string; dslrShutterSpeed: string; dslrAperture: string; dslrFocusMode?: string; dslrWhiteBalance?: string; dslrWhiteBalanceKelvin?: number; obfuscateLinks?: number; expiryType?: string; expiryValue?: string; organizer?: string; contactInfo?: string }) {
@@ -1025,4 +1089,194 @@ export function resolveEmailTemplate(
   if (event?.[field] && event[field].trim() !== '') return event[field]
   if (globals?.[globalField] && globals[globalField].trim() !== '') return globals[globalField]
   return null
+}
+
+export interface EventExportPackage {
+  version: number
+  exportedAt: string
+  event: any
+  photoSessions?: any[]
+  sessionShares?: any[]
+  eventShares?: any[]
+  emailSends?: any[]
+  operators?: any[]
+}
+
+export function getEventFullExportData(eventId: string): EventExportPackage | null {
+  const event = getEvent(eventId)
+  if (!event) return null
+
+  const photoSessions = db.prepare('SELECT * FROM photo_sessions WHERE event_id = ? ORDER BY created_at ASC').all(eventId)
+  const sessionShares = db.prepare(`
+    SELECT ss.* FROM session_shares ss 
+    JOIN photo_sessions ps ON ps.id = ss.session_id 
+    WHERE ps.event_id = ?
+    ORDER BY ss.created_at ASC
+  `).all(eventId)
+  const eventShares = db.prepare('SELECT * FROM event_shares WHERE event_id = ? ORDER BY created_at ASC').all(eventId)
+  const emailSends = db.prepare('SELECT * FROM email_sends WHERE event_id = ? ORDER BY created_at ASC').all(eventId)
+  const operators = db.prepare('SELECT id, event_id, name, password_hash, access_token, created_at FROM event_operators WHERE event_id = ?').all(eventId)
+
+  return {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    event,
+    photoSessions,
+    sessionShares,
+    eventShares,
+    emailSends,
+    operators
+  }
+}
+
+export function importEventData(exportData: any, options: { overwrite?: boolean } = {}) {
+  const { event, photoSessions = [], sessionShares = [], eventShares = [], emailSends = [], operators = [] } = exportData
+  if (!event || !event.name) {
+    throw new Error('Invalid event data package: missing event information')
+  }
+
+  const existingEvent = getEvent(event.id)
+  let targetEventId = event.id
+
+  if (existingEvent) {
+    if (options.overwrite) {
+      deleteEvent(event.id)
+    } else {
+      targetEventId = `evt_${Date.now()}_${randomInt(1000, 9999)}`
+    }
+  }
+
+  // Ensure unique OTP across events
+  let targetOtp = event.otp
+  if (!targetOtp || options.overwrite !== true || !existingEvent) {
+    const otpConflict = db.prepare('SELECT id FROM events WHERE otp = ? AND id != ?').get(targetOtp || '', targetEventId)
+    if (otpConflict || !targetOtp) {
+      targetOtp = generateOtp()
+    }
+  }
+
+  const insertFullEvent = db.prepare(`
+    INSERT INTO events (
+      id, name, date, description, otp, status, created_at, photo_count, countdown, capture_interval,
+      post_capture_preview, dslr_iso, dslr_shutterspeed, dslr_aperture, dslr_focus_mode,
+      dslr_whitebalance, dslr_whitebalance_kelvin, obfuscate_links, expiry_type, expiry_value,
+      organizer, contact_info, share_originals, operator_password, msg_homepage, msg_countdown,
+      msg_post_session, msg_share_title, msg_order, email_subject, email_body, email_from_name, email_enabled
+    ) VALUES (
+      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+      ?, ?, ?, ?, ?,
+      ?, ?, ?, ?, ?,
+      ?, ?, ?, ?, ?, ?,
+      ?, ?, ?, ?, ?, ?, ?
+    )
+  `)
+
+  const eventName = (targetEventId !== event.id && !options.overwrite) ? `${event.name} (Imported)` : event.name
+
+  insertFullEvent.run(
+    targetEventId,
+    eventName,
+    event.date || new Date().toISOString().split('T')[0],
+    event.description || '',
+    targetOtp,
+    event.status || 'active',
+    event.created_at || new Date().toISOString(),
+    event.photo_count ?? 4,
+    event.countdown ?? 5,
+    event.capture_interval ?? 1,
+    event.post_capture_preview ?? 2,
+    event.dslr_iso || 'auto',
+    event.dslr_shutterspeed || 'auto',
+    event.dslr_aperture || 'auto',
+    event.dslr_focus_mode || 'auto',
+    event.dslr_whitebalance || 'auto',
+    event.dslr_whitebalance_kelvin ?? 5200,
+    event.obfuscate_links ?? 0,
+    event.expiry_type || 'none',
+    event.expiry_value || '',
+    event.organizer || '',
+    event.contact_info || '',
+    event.share_originals ?? 1,
+    event.operator_password || null,
+    event.msg_homepage || null,
+    event.msg_countdown || null,
+    event.msg_post_session || null,
+    event.msg_share_title || null,
+    event.msg_order || 'random',
+    event.email_subject || null,
+    event.email_body || null,
+    event.email_from_name || null,
+    event.email_enabled ?? 1
+  )
+
+  const insertSession = db.prepare(`
+    INSERT OR REPLACE INTO photo_sessions (
+      id, event_id, share_id, created_at, archived, upload_status,
+      upload_started_at, upload_completed_at, upload_size_bytes, upload_avg_speed_kbps, width, height
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `)
+  for (const s of photoSessions) {
+    insertSession.run(
+      s.id,
+      targetEventId,
+      s.share_id || null,
+      s.created_at || new Date().toISOString(),
+      s.archived ?? 0,
+      s.upload_status || 'complete',
+      s.upload_started_at || null,
+      s.upload_completed_at || null,
+      s.upload_size_bytes || null,
+      s.upload_avg_speed_kbps || null,
+      s.width || 0,
+      s.height || 0
+    )
+  }
+
+  const insertSessionShare = db.prepare(`
+    INSERT OR IGNORE INTO session_shares (id, session_id, created_at, is_active)
+    VALUES (?, ?, ?, ?)
+  `)
+  for (const ss of sessionShares) {
+    insertSessionShare.run(ss.id, ss.session_id, ss.created_at || new Date().toISOString(), ss.is_active ?? 1)
+  }
+
+  const insertEventShare = db.prepare(`
+    INSERT OR IGNORE INTO event_shares (token, event_id, created_at)
+    VALUES (?, ?, ?)
+  `)
+  for (const es of eventShares) {
+    insertEventShare.run(es.token, targetEventId, es.created_at || new Date().toISOString())
+  }
+
+  const insertEmailSend = db.prepare(`
+    INSERT OR IGNORE INTO email_sends (
+      id, session_id, event_id, share_id, recipient_email, status,
+      error_code, error_message, sent_at, created_at, sent_by_name
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `)
+  for (const es of emailSends) {
+    insertEmailSend.run(
+      es.id,
+      es.session_id,
+      targetEventId,
+      es.share_id,
+      es.recipient_email,
+      es.status || 'sent',
+      es.error_code || null,
+      es.error_message || null,
+      es.sent_at || null,
+      es.created_at || new Date().toISOString(),
+      es.sent_by_name || null
+    )
+  }
+
+  const insertOp = db.prepare(`
+    INSERT OR IGNORE INTO event_operators (id, event_id, name, password_hash, access_token, created_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `)
+  for (const op of operators) {
+    insertOp.run(op.id, targetEventId, op.name, op.password_hash, op.access_token, op.created_at || new Date().toISOString())
+  }
+
+  return { targetEventId, originalEventId: event.id }
 }

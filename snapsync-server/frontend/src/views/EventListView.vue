@@ -9,6 +9,14 @@
           
         </div>
         <div class="events-header-right">
+          <AppButton v-if="authStore.user?.role === 'admin'" variant="secondary" @click="openImportModal" style="margin-right: 0.5rem;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px;">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="17 8 12 3 7 8"></polyline>
+              <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+            Import Event
+          </AppButton>
           <AppButton v-if="authStore.user?.role === 'admin'" variant="primary" @click="showCreateModal = true">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px;">
               <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -82,6 +90,64 @@
       </div>
     </Teleport>
 
+    <!-- Import Event Package Modal -->
+    <AppModal v-model="showImportModal" title="Import Event Package">
+      <div class="import-modal-content">
+        <p style="font-size: var(--text-sm); color: var(--color-text-sub); margin-bottom: 1rem; line-height: 1.5;">
+          Select a Snapsync event backup ZIP file to import. The archive restores all frame configurations, original photos, and event database settings.
+        </p>
+
+        <div class="import-dropzone" :class="{ 'has-file': !!selectedZipFile }" @click="triggerFileInput">
+          <input
+            ref="fileInputRef"
+            type="file"
+            accept=".zip,application/zip"
+            style="display: none;"
+            @change="handleFileChange"
+          />
+          <div v-if="!selectedZipFile" class="dropzone-placeholder">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 0.5rem; color: var(--color-text-sub);">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="17 8 12 3 7 8"></polyline>
+              <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+            <div style="font-weight: 500;">Click to select an event ZIP file</div>
+            <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: 0.25rem;">Supports backups exported from Snapsync (up to 1GB)</div>
+          </div>
+          <div v-else class="dropzone-file-info">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+            </svg>
+            <div style="flex: 1; text-align: left; margin-left: 0.75rem; overflow: hidden;">
+              <strong style="display:block; font-size: var(--text-sm); text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">{{ selectedZipFile.name }}</strong>
+              <span style="font-size: var(--text-xs); color: var(--color-text-sub);">{{ formatBytes(selectedZipFile.size) }}</span>
+            </div>
+            <button type="button" @click.stop="selectedZipFile = null" class="btn-clear-file" title="Remove file">&times;</button>
+          </div>
+        </div>
+
+        <div style="margin-top: 1rem;">
+          <label class="checkbox-label" style="display: flex; align-items: flex-start; gap: 0.5rem; font-size: var(--text-sm); cursor: pointer;">
+            <input type="checkbox" v-model="importOverwrite" style="margin-top: 0.2rem;" />
+            <div>
+              <span>Overwrite existing event if matching ID is found</span>
+              <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: 0.15rem;">
+                If unchecked, an event with an existing ID will be safely imported as a new copy.
+              </div>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <template #footer>
+        <AppButton variant="secondary" @click="showImportModal = false" :disabled="importing">Cancel</AppButton>
+        <AppButton variant="primary" @click="executeImport" :disabled="!selectedZipFile || importing">
+          {{ importing ? 'Importing...' : 'Upload & Import' }}
+        </AppButton>
+      </template>
+    </AppModal>
+
   </div>
 </template>
 
@@ -89,6 +155,7 @@
 import { ref, onMounted } from 'vue'
 import AppTopNav from '../components/ui/AppTopNav.vue'
 import AppButton from '../components/ui/AppButton.vue'
+import AppModal from '../components/ui/AppModal.vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { usePhotosStore } from '../stores/photos'
@@ -109,18 +176,82 @@ const createdOtp = ref('')
 const showOtpModal = ref(false)
 const otpCopied = ref(false)
 
-function formatDate(dateStr: string) {
-  if (!dateStr) return ''
-  return new Date(dateStr).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
+const showImportModal = ref(false)
+const selectedZipFile = ref<File | null>(null)
+const importOverwrite = ref(false)
+const importing = ref(false)
+const fileInputRef = ref<HTMLInputElement | null>(null)
+
+function openImportModal() {
+  selectedZipFile.value = null
+  importOverwrite.value = false
+  showImportModal.value = true
 }
 
-onMounted(async () => {
+function triggerFileInput() {
+  fileInputRef.value?.click()
+}
+
+function handleFileChange(e: Event) {
+  const target = e.target as HTMLInputElement
+  if (target.files && target.files.length > 0) {
+    selectedZipFile.value = target.files[0]
+  }
+}
+
+function formatBytes(bytes: number) {
+  if (bytes === 0) return '0 Bytes'
+  const k = 1024
+  const sizes = ['Bytes', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+}
+
+async function loadEvents() {
   try {
     const { data } = await (await import('axios')).default.get('/api/admin/events?includeEnded=true')
     events.value = data.events
   } catch (err) {
     toast.error('Failed to load events')
   }
+}
+
+async function executeImport() {
+  if (!selectedZipFile.value) return
+  importing.value = true
+  const formData = new FormData()
+  formData.append('file', selectedZipFile.value)
+  if (importOverwrite.value) {
+    formData.append('overwrite', 'true')
+  }
+
+  try {
+    const axios = (await import('axios')).default
+    const { data } = await axios.post('/api/admin/events/import', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+    toast.success('Event package imported successfully!')
+    showImportModal.value = false
+    selectedZipFile.value = null
+    await loadEvents()
+    if (data.eventId) {
+      router.push(`/events/${data.eventId}`)
+    }
+  } catch (err: any) {
+    console.error('Import error:', err)
+    toast.error(err.response?.data?.error || 'Failed to import event ZIP')
+  } finally {
+    importing.value = false
+  }
+}
+
+function formatDate(dateStr: string) {
+  if (!dateStr) return ''
+  return new Date(dateStr).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
+}
+
+onMounted(async () => {
+  await loadEvents()
 })
 
 async function handleCreate() {
@@ -270,9 +401,67 @@ async function handleLogout() {
   color: var(--color-success);
 }
 
+.status-upcoming {
+  background: #1e293b;
+  color: #3b82f6;
+}
+
+.status-completed {
+  background: #2e1065;
+  color: #c084fc;
+}
+
+.status-inactive {
+  background: #334155;
+  color: #94a3b8;
+}
+
 .status-ended {
   background: var(--color-border);
   color: var(--color-error);
+}
+
+.import-modal-content {
+  padding: 0.25rem 0;
+}
+.import-dropzone {
+  border: 2px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 2rem 1rem;
+  text-align: center;
+  cursor: pointer;
+  background: var(--color-surface);
+  transition: all 0.15s ease;
+}
+.import-dropzone:hover {
+  border-color: var(--color-primary, #3b82f6);
+}
+.import-dropzone.has-file {
+  border-style: solid;
+  border-color: #22c55e;
+  padding: 1.25rem 1rem;
+}
+.dropzone-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.dropzone-file-info {
+  display: flex;
+  align-items: center;
+}
+.btn-clear-file {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  color: var(--color-text-sub);
+  cursor: pointer;
+  padding: 0 0.5rem;
+  line-height: 1;
+}
+.btn-clear-file:hover {
+  color: var(--color-error, #ef4444);
 }
 
 .empty-state {

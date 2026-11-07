@@ -42,6 +42,7 @@ contextBridge.exposeInMainWorld('snapsync', {
   // ------------------------------------------------------------------
   // Upload
   // ------------------------------------------------------------------
+  reserveSession: (sessionId: string) => ipcRenderer.invoke('reserve-session', sessionId),
   uploadPhotos: (data: {
     sessionId: string
     imagePaths: string[]

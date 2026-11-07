@@ -109,6 +109,15 @@
           <span v-if="pendingAction === 'pause'" class="app-spinner inline-spinner"></span>
           {{ pendingAction === 'pause' ? 'Pausing...' : 'Pause Booth' }}
         </button>
+        <button v-if="boothState?.shareUrl" class="app-btn full-width-btn btn-show-qr-active" @click="showLocalQR">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="7" height="7"></rect>
+            <rect x="14" y="3" width="7" height="7"></rect>
+            <rect x="14" y="14" width="7" height="7"></rect>
+            <rect x="3" y="14" width="7" height="7"></rect>
+          </svg>
+          Show QR Code {{ currentState === 'capturing' ? '(Active)' : '' }}
+        </button>
       </div>
     </section>
 
@@ -611,6 +620,19 @@ onUnmounted(() => {
 .btn-resume {
   background: var(--color-success);
   color: #fff;
+}
+.btn-show-qr-active {
+  background: var(--color-info, #2196f3);
+  color: #fff;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+.btn-show-qr-active:hover:not(:disabled) {
+  filter: brightness(1.1);
 }
 .app-btn--secondary {
   background: var(--color-surface);

@@ -499,6 +499,50 @@ export function initIpcHandlers(
     }
   })
 
+  const reservedSessions = new Map<string, { shareId: string; shareUrl: string }>()
+
+  ipcMain.handle('reserve-session', async (event, sessionId: string) => {
+    if (reservedSessions.has(sessionId)) {
+      const existing = reservedSessions.get(sessionId)!
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('share-id-ready', {
+          sessionId,
+          shareId: existing.shareId,
+          shareUrl: existing.shareUrl
+        })
+      }
+      return { success: true, ...existing }
+    }
+    try {
+      const reserveHeaders: Record<string, string> = { 'Content-Type': 'application/json' }
+      const s = getSettingsSync()
+      if (s.otp) reserveHeaders['X-Booth-OTP'] = s.otp
+      const reserveRes = await fetch(`${_serverUrl}/api/booth/session/reserve`, {
+        method: 'POST',
+        headers: reserveHeaders,
+        body: JSON.stringify({ sessionId }),
+        signal: AbortSignal.timeout(5000),
+      })
+      if (reserveRes.ok) {
+        const rd = await reserveRes.json()
+        if (rd.shareId) {
+          reservedSessions.set(sessionId, { shareId: rd.shareId, shareUrl: rd.shareUrl })
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('share-id-ready', {
+              sessionId,
+              shareId: rd.shareId,
+              shareUrl: rd.shareUrl
+            })
+          }
+          return { success: true, shareId: rd.shareId, shareUrl: rd.shareUrl }
+        }
+      }
+    } catch (e: any) {
+      console.warn('[IPC] reserve-session error:', e.message)
+    }
+    return { success: false }
+  })
+
   // ------------------------------------------------------------------
   // Upload photos
   // ------------------------------------------------------------------
@@ -511,32 +555,37 @@ export function initIpcHandlers(
     shareTitle?: string | null
   }) => {
     // Step 1: Reserve a shareId before upload starts (for instant QR)
-    let reservedShareId: string | undefined
-    let reservedShareUrl: string | undefined
-    try {
-      const reserveHeaders: Record<string, string> = { 'Content-Type': 'application/json' }
-      const s = getSettingsSync()
-      if (s.otp) reserveHeaders['X-Booth-OTP'] = s.otp
-      const reserveRes = await fetch(`${_serverUrl}/api/booth/session/reserve`, {
-        method: 'POST',
-        headers: reserveHeaders,
-        body: JSON.stringify({ sessionId: data.sessionId }),
-        signal: AbortSignal.timeout(5000),
-      })
-      if (reserveRes.ok) {
-        const rd = await reserveRes.json()
-        reservedShareId = rd.shareId
-        reservedShareUrl = rd.shareUrl
-        if (reservedShareId && mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('share-id-ready', {
-            sessionId: data.sessionId,
-            shareId: reservedShareId,
-            shareUrl: reservedShareUrl
-          })
+    let reservedShareId: string | undefined = reservedSessions.get(data.sessionId)?.shareId
+    let reservedShareUrl: string | undefined = reservedSessions.get(data.sessionId)?.shareUrl
+    if (!reservedShareId) {
+      try {
+        const reserveHeaders: Record<string, string> = { 'Content-Type': 'application/json' }
+        const s = getSettingsSync()
+        if (s.otp) reserveHeaders['X-Booth-OTP'] = s.otp
+        const reserveRes = await fetch(`${_serverUrl}/api/booth/session/reserve`, {
+          method: 'POST',
+          headers: reserveHeaders,
+          body: JSON.stringify({ sessionId: data.sessionId }),
+          signal: AbortSignal.timeout(5000),
+        })
+        if (reserveRes.ok) {
+          const rd = await reserveRes.json()
+          reservedShareId = rd.shareId
+          reservedShareUrl = rd.shareUrl
+          if (reservedShareId && reservedShareUrl) {
+            reservedSessions.set(data.sessionId, { shareId: reservedShareId, shareUrl: reservedShareUrl })
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('share-id-ready', {
+                sessionId: data.sessionId,
+                shareId: reservedShareId,
+                shareUrl: reservedShareUrl
+              })
+            }
+          }
         }
+      } catch {
+        // Server unreachable — QR will use sessionId fallback
       }
-    } catch {
-      // Server unreachable — QR will use sessionId fallback
     }
 
     const finalPaths: string[] = [...data.imagePaths]

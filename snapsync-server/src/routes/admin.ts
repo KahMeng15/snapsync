@@ -14,6 +14,8 @@ import { v4 as uuidv4 } from 'uuid'
 import { applyFrame } from '../pipeline'
 import { io, disconnectBooth } from '../server'
 import bcrypt from 'bcryptjs'
+const archiver = require('archiver')
+import AdmZip from 'adm-zip'
 import { requireRole, checkLoginLockout, recordFailedLogin, clearFailedLogin } from '../middleware/authMiddleware'
 import {
   updateEventMessages, createEvent, updateEventById, getEvent, listEvents,
@@ -22,8 +24,13 @@ import {
   archiveSession, restoreSession, getEventAnalytics,
   getAllUsers, insertUser, deleteUser, findUserByEmail, findUserById, updateUser, clearSuperAdmins, regenerateSessionShareId, setEventShareOriginals,
   getSessionShares, createSessionShare, setSessionShareStatus, deleteSessionShare, setSessionDimensions, addEventOperator, listEventOperators, deleteEventOperator, getOrCreateEventShareToken,
-  regenerateEventOtp
+  regenerateEventOtp, getEventFullExportData, importEventData
 } from '@snapsync/shared'
+
+const zipUpload = multer({
+  dest: os.tmpdir(),
+  limits: { fileSize: 1024 * 1024 * 1024 }, // 1GB
+})
 
 const router = Router()
 
@@ -615,6 +622,7 @@ const updateEventSchema = z.object({
   name: z.string().max(200).optional(),
   date: z.string().optional(),
   description: z.string().max(1000).optional(),
+  status: z.enum(['upcoming', 'active', 'completed', 'inactive', 'ended']).optional(),
   photoCount: z.number().min(1).max(10).optional(),
   countdown: z.number().min(1).max(30).optional(),
   captureInterval: z.number().min(0).max(30).optional(),
@@ -639,13 +647,13 @@ const updateEventSchema = z.object({
       if (!parseResult.success) {
         return res.status(400).json({ error: parseResult.error.issues[0].message })
       }
-      const { name, date, description, photoCount, countdown, captureInterval, postCapturePreview, dslrIso, dslrShutterSpeed, dslrAperture, dslrFocusMode, dslrWhiteBalance, obfuscateLinks, expiryType, expiryValue, organizer, contactInfo } = parseResult.data as any
+      const { name, date, description, status, photoCount, countdown, captureInterval, postCapturePreview, dslrIso, dslrShutterSpeed, dslrAperture, dslrFocusMode, dslrWhiteBalance, obfuscateLinks, expiryType, expiryValue, organizer, contactInfo } = parseResult.data as any
       const { msgHomepage, msgCountdown, msgPostSession, msgShareTitle, msgOrder, emailSubject, emailBody, emailFromName, emailEnabled } = req.body as any
       updateEventById(req.params.id,
         name ?? event.name,
         date ?? event.date,
         description ?? event.description,
-        { photoCount, countdown, captureInterval, postCapturePreview, dslrIso, dslrShutterSpeed, dslrAperture, dslrFocusMode, dslrWhiteBalance, obfuscateLinks: obfuscateLinks !== undefined ? (obfuscateLinks ? 1 : 0) : undefined, expiryType, expiryValue, organizer, contactInfo }
+        { photoCount, countdown, captureInterval, postCapturePreview, dslrIso, dslrShutterSpeed, dslrAperture, dslrFocusMode, dslrWhiteBalance, obfuscateLinks: obfuscateLinks !== undefined ? (obfuscateLinks ? 1 : 0) : undefined, expiryType, expiryValue, organizer, contactInfo, status }
       )
       
       if (msgOrder !== undefined) {
@@ -717,6 +725,136 @@ router.post('/events/:id/reset-otp', async (req: Request, res: Response) => {
     res.json({ success: true, otp: newOtp })
   } catch (error: any) {
     res.status(400).json({ error: error.message })
+  }
+})
+
+router.get('/events/:id/export', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params
+    const scope = (req as any).user?.eventIdScope
+    if (scope && scope !== id) {
+      return res.status(403).json({ error: 'Access denied: Token scoped to a different event' })
+    }
+
+    const event = getEvent(id)
+    if (!event) return res.status(404).json({ error: 'Event not found' })
+
+    const exportData = getEventFullExportData(id)
+    if (!exportData) return res.status(404).json({ error: 'Failed to retrieve event export data' })
+
+    const safeName = (event.name || 'event').replace(/[^a-zA-Z0-9_-]/g, '_')
+    const filename = `${safeName}_${id}_data.zip`
+
+    res.setHeader('Content-Type', 'application/zip')
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
+
+    const archive = new archiver.ZipArchive({ zlib: { level: 6 } })
+    archive.on('error', (err: any) => {
+      logger.error('Error generating event export zip:', err)
+      if (!res.headersSent) res.status(500).json({ error: 'Archive generation failed' })
+    })
+
+    archive.pipe(res)
+
+    // 1. Add event.json manifest
+    archive.append(JSON.stringify(exportData, null, 2), { name: 'event.json' })
+
+    // 2. Add frames directory if exists
+    const framesDir = config.eventFrames(id)
+    try {
+      await fs.access(framesDir)
+      archive.directory(framesDir, 'frames')
+    } catch {
+      // frames dir may not exist
+    }
+
+    // 3. Add photos directory if exists
+    const photosDir = config.eventPhotosDir(id)
+    try {
+      await fs.access(photosDir)
+      archive.directory(photosDir, 'photos')
+    } catch {
+      // photos dir may not exist
+    }
+
+    await archive.finalize()
+  } catch (error: any) {
+    logger.error('Export event failed:', error)
+    if (!res.headersSent) {
+      res.status(500).json({ error: error.message || 'Export failed' })
+    }
+  }
+})
+
+router.post('/events/import', requireRole('admin'), zipUpload.single('file'), async (req: Request, res: Response) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'No zip file uploaded' })
+  }
+
+  const zipPath = req.file.path
+  try {
+    const zip = new AdmZip(zipPath)
+    const zipEntries = zip.getEntries()
+
+    const manifestEntry = zipEntries.find((e: any) => e.entryName === 'event.json' || e.entryName === 'manifest.json')
+    if (!manifestEntry) {
+      return res.status(400).json({ error: 'Invalid archive: event.json not found in root of zip file' })
+    }
+
+    const manifestText = manifestEntry.getData().toString('utf8')
+    let exportData: any
+    try {
+      exportData = JSON.parse(manifestText)
+    } catch {
+      return res.status(400).json({ error: 'Invalid event.json JSON format' })
+    }
+
+    const overwrite = req.body.overwrite === 'true' || req.body.overwrite === true
+    const { targetEventId, originalEventId } = importEventData(exportData, { overwrite })
+
+    const targetPhotosDir = config.eventPhotosDir(targetEventId)
+    const targetFramesDir = config.eventFrames(targetEventId)
+
+    if (overwrite) {
+      try { await fs.rm(targetPhotosDir, { recursive: true, force: true }) } catch {}
+      try { await fs.rm(targetFramesDir, { recursive: true, force: true }) } catch {}
+    }
+
+    await fs.mkdir(targetPhotosDir, { recursive: true })
+    await fs.mkdir(targetFramesDir, { recursive: true })
+
+    // Extract entries
+    for (const entry of zipEntries) {
+      if (entry.isDirectory) continue
+      const entryName = entry.entryName.replace(/\\/g, '/')
+
+      if (entryName.startsWith('photos/')) {
+        const relPath = entryName.substring('photos/'.length)
+        if (relPath) {
+          const destFile = path.join(targetPhotosDir, relPath)
+          await fs.mkdir(path.dirname(destFile), { recursive: true })
+          await fs.writeFile(destFile, entry.getData())
+        }
+      } else if (entryName.startsWith('frames/')) {
+        const relPath = entryName.substring('frames/'.length)
+        if (relPath) {
+          const destFile = path.join(targetFramesDir, relPath)
+          await fs.mkdir(path.dirname(destFile), { recursive: true })
+          await fs.writeFile(destFile, entry.getData())
+        }
+      }
+    }
+
+    logger.info(`Event imported successfully: ${targetEventId} (from original: ${originalEventId})`)
+    const updated = getEvent(targetEventId)
+    res.json({ success: true, eventId: targetEventId, event: updated })
+  } catch (err: any) {
+    logger.error('Failed to import event zip:', err)
+    res.status(500).json({ error: err.message || 'Failed to import event' })
+  } finally {
+    try {
+      await fs.unlink(zipPath)
+    } catch {}
   }
 })
 
@@ -870,8 +1008,30 @@ router.get('/events/:id/photos', async (req: Request, res: Response) => {
           share_id: dbSess ? (dbSess as any).share_id : null,
           photoWidth: w,
           photoHeight: h,
+          inProgress: false,
+          uploadStatus: dbSess ? (dbSess as any).upload_status || 'complete' : 'complete',
         }
       }))
+
+    // Add any DB sessions that are in-progress / reserved / not yet uploaded
+    for (const dbSess of dbSessions) {
+      if (!sessionMap.has(dbSess.id)) {
+        sessions.push({
+          sessionId: dbSess.id,
+          photoCount: 0,
+          firstPhoto: null,
+          photos: [],
+          timestamps: [(dbSess as any).created_at || new Date().toISOString()],
+          createdAt: (dbSess as any).created_at || new Date().toISOString(),
+          archived: dbSess.archived === 1,
+          share_id: (dbSess as any).share_id || null,
+          photoWidth: (dbSess as any).width || 0,
+          photoHeight: (dbSess as any).height || 0,
+          inProgress: true,
+          uploadStatus: (dbSess as any).upload_status || 'reserved',
+        })
+      }
+    }
     
     sessions.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
 

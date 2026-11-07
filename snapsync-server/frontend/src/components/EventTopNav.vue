@@ -176,6 +176,18 @@ import axios from 'axios'
   background: #1a3a2a;
   color: var(--color-success);
 }
+.status-upcoming {
+  background: #1e293b;
+  color: #3b82f6;
+}
+.status-completed {
+  background: #2e1065;
+  color: #c084fc;
+}
+.status-inactive {
+  background: #334155;
+  color: #94a3b8;
+}
 .status-ended {
   background: var(--color-border);
   color: var(--color-error);
