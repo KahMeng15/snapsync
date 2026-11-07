@@ -10,6 +10,7 @@ services:
       NODE_ENV: production
       PORT: 3000
       STORAGE_ROOT: /app
+      TZ: ${TZ:-Asia/Kuala_Lumpur}
     volumes:
       - ./storage/photos:/app/storage/photos
       - ./storage/frames:/app/storage/frames
@@ -33,6 +34,7 @@ services:
       NODE_ENV: production
       PORT: 3001
       STORAGE_ROOT: /app
+      TZ: ${TZ:-Asia/Kuala_Lumpur}
     volumes:
       - ./storage/photos:/app/storage/photos:ro
       - ./storage/frames:/app/storage/frames:ro

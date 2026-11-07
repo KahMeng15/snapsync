@@ -82,9 +82,11 @@ async function fetchAnalytics() {
   }
 }
 
+import { formatDateTime } from '@/utils/dateFormat'
+
 function formatTime(str: string) {
-  const d = new Date(str)
-  return d.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+  if (!str) return '-'
+  return formatDateTime(str)
 }
 
 onMounted(() => {

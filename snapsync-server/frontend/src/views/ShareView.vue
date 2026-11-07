@@ -184,6 +184,7 @@ const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, '')
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import axios from 'axios'
+import { formatDateTime } from '@/utils/dateFormat'
 
 interface SessionPhoto {
   id: string
@@ -299,18 +300,7 @@ const animationPhotos = computed(() => {
 
 const expiryText = computed(() => {
   if (!session.value || !session.value.expiresAt) return null
-  const d = new Date(session.value.expiresAt)
-  const today = new Date()
-  
-  const opts: Intl.DateTimeFormatOptions = {
-    month: 'short',
-    day: 'numeric',
-    year: d.getFullYear() !== today.getFullYear() ? 'numeric' : undefined,
-    hour: 'numeric',
-    minute: '2-digit',
-    timeZoneName: 'short'
-  }
-  return `Link expires on ${d.toLocaleString(undefined, opts)}`
+  return `Link expires on ${formatDateTime(session.value.expiresAt)}`
 })
 
 let sharePollInterval: any = null

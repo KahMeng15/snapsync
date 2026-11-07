@@ -281,10 +281,61 @@ export declare function getPhotoSessionByShareId(shareId: string): {
     archived: number;
 } | undefined;
 export declare function logShareAnalytics(shareId: string, ipAddress: string | null, deviceType: string | null, os: string | null, browser: string | null, action: string, targetFile?: string | null, source?: string | null): void;
+export declare function getAllEventShareTokens(eventId: string): string[];
 export declare function getEventAnalytics(eventId: string): {
+    eventId: string;
+    eventName: string;
+    eventDate: string;
+    summary: {
+        totalSessions: any;
+        completedSessions: any;
+        archivedSessions: any;
+        totalPhotos: number;
+        totalViews: number;
+        uniqueVisitors: number;
+        totalDownloads: number;
+        photoDownloads: number;
+        zipDownloads: number;
+        qrScans: number;
+        directVisits: number;
+        emailsSent: number;
+        emailsTotal: number;
+        avgSessionSpeedKbps: number;
+        totalDataBytes: any;
+        firstSessionAt: any;
+        lastSessionAt: any;
+    };
+    breakdowns: {
+        devices: any[];
+        os: any[];
+        browsers: any[];
+        sources: {
+            name: string;
+            count: number;
+            percent: number;
+        }[];
+    };
+    timeline: {
+        hourly: {
+            hour: string;
+            sessions: number;
+            views: number;
+            downloads: number;
+        }[];
+        peakHour: string | null;
+    };
+    topDownloads: any[];
+    sessions: any[];
+    activity: any[];
     totalVisits: number;
     uniqueVisitors: number;
-    logs: unknown[];
+    logs: any[];
+};
+export declare function seedEventAnalytics(eventId: string, options?: {
+    count?: number;
+}): {
+    success: boolean;
+    count: number;
 };
 export declare function findUserByEmail(email: string): any;
 export declare function findUserById(id: string): any;

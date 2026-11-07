@@ -245,9 +245,11 @@ async function executeImport() {
   }
 }
 
+import { formatDate as formatAppDate } from '@/utils/dateFormat'
+
 function formatDate(dateStr: string) {
   if (!dateStr) return ''
-  return new Date(dateStr).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
+  return formatAppDate(dateStr)
 }
 
 onMounted(async () => {

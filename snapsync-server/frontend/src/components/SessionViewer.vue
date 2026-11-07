@@ -152,7 +152,7 @@
       <div v-for="share in shares" :key="share.id" :class="['share-item', { 'disabled-item': !share.is_active }]">
         <div class="share-info">
           <a :href="shareBaseUrl + '/' + share.id" target="_blank" class="share-url" title="Open Share Link">{{ shareBaseUrl }}/{{ share.id }}</a>
-          <div class="share-date">{{ new Date(share.created_at).toLocaleString() }}</div>
+          <div class="share-date">{{ formatDateTime(share.created_at) }}</div>
         </div>
         <div class="share-actions-dropdown">
           <AppButton variant="icon" @click="toggleDropdown(share.id, $event)">
@@ -190,7 +190,7 @@
           <div class="share-info">
             <div style="font-weight: 500;">{{ email.recipientEmail }}</div>
             <div class="share-date" style="display: flex; flex-direction: column; gap: 0.2rem;">
-              <span>{{ new Date(email.createdAt).toLocaleString() }}</span>
+              <span>{{ formatDateTime(email.createdAt) }}</span>
               <span>Link: <a :href="email.shareUrl" target="_blank">{{ email.shareId }}</a></span>
               <span v-if="email.status === 'failed'" style="color: var(--danger-color)">Failed: {{ email.errorMessage }}</span>
               <span v-else-if="email.status === 'sent'" style="color: var(--success-color)">Sent</span>
@@ -853,11 +853,10 @@ async function deleteSession() {
   }
 }
 
+import { formatDateTime } from '@/utils/dateFormat'
+
 function formatTime(ts: string) {
-  const d = new Date(ts)
-  const time = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })
-  const date = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
-  return `${time.replace(' ', '')}, ${date}`
+  return formatDateTime(ts)
 }
 </script>
 

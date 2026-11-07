@@ -122,9 +122,10 @@ async function deleteSession() {
   emit('close')
 }
 
+import { formatDateTime } from '@/utils/dateFormat'
+
 function formatTime(ts: string) {
-  const d = new Date(ts)
-  return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true })
+  return formatDateTime(ts)
 }
 </script>
 

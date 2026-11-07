@@ -4,7 +4,7 @@ import fs from 'fs/promises'
 import sharp from 'sharp'
 const archiver = require('archiver')
 import { v4 as uuidv4 } from 'uuid'
-import { config, logger, getEvent, getPhotoSessionByShareId, getPhotoSession, getSessionUploadStatus, getSessionDimensions, getOrCreateEventShareToken, getEventIdByShareToken, getEventByOtp, getActiveFrames, generateSignedUrl, verifySignedUrl } from '@snapsync/shared'
+import { config, logger, getEvent, getPhotoSessionByShareId, getPhotoSession, getSessionUploadStatus, getSessionDimensions, getOrCreateEventShareToken, getEventIdByShareToken, getEventByOtp, getActiveFrames, generateSignedUrl, verifySignedUrl, logShareAnalytics } from '@snapsync/shared'
 import { UAParser } from 'ua-parser-js'
 
 const router = Router()
@@ -249,14 +249,7 @@ router.post('/:token/analytics', async (req: Request, res: Response) => {
     const browser = parser.getBrowser().name || 'Unknown Browser'
     const ip = req.ip || req.socket.remoteAddress || 'Unknown IP'
 
-    fetch((process.env.ADMIN_INTERNAL_URL || 'http://localhost:3000') + '/internal/analytics', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-internal-secret': process.env.INTERNAL_API_SECRET || ''
-      },
-      body: JSON.stringify({ args: [token, ip, deviceType, os, browser, 'view', null, source] })
-    }).catch(err => logger.error('Analytics write failed', err))
+    logShareAnalytics(token, ip, deviceType, os, browser, 'view', null, source)
     res.json({ success: true })
   } catch (error: any) {
     logger.error(`Analytics error: ${error.message}`)
@@ -408,14 +401,7 @@ router.get('/:token/download-all', async (req: Request, res: Response) => {
     const os = parser.getOS().name || 'Unknown OS'
     const browser = parser.getBrowser().name || 'Unknown Browser'
     const ip = req.ip || req.socket.remoteAddress || 'Unknown IP'
-    fetch((process.env.ADMIN_INTERNAL_URL || 'http://localhost:3000') + '/internal/analytics', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-internal-secret': process.env.INTERNAL_API_SECRET || ''
-      },
-      body: JSON.stringify({ args: [token, ip, deviceType, os, browser, 'download', 'all'] })
-    }).catch(err => logger.error('Analytics write failed', err))
+    logShareAnalytics(token, ip, deviceType, os, browser, 'download', 'all', null)
 
     await archive.finalize()
   } catch (error: any) {
@@ -515,14 +501,7 @@ router.get('/:token/photo/:filename', async (req: Request, res: Response) => {
       const os = parser.getOS().name || 'Unknown OS'
       const browser = parser.getBrowser().name || 'Unknown Browser'
       const ip = req.ip || req.socket.remoteAddress || 'Unknown IP'
-      fetch((process.env.ADMIN_INTERNAL_URL || 'http://localhost:3000') + '/internal/analytics', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-internal-secret': process.env.INTERNAL_API_SECRET || ''
-      },
-      body: JSON.stringify({ args: [token, ip, deviceType, os, browser, 'download', targetFilename] })
-    }).catch(err => logger.error('Analytics write failed', err))
+      logShareAnalytics(token, ip, deviceType, os, browser, 'download', targetFilename, null)
       
       const safeEventName = event.name.replace(/[^a-zA-Z0-9_-]/g, '_')
       const indexMatch = targetFilename.match(/_(\d+)\.\w+$/)

@@ -1,0 +1,44 @@
+
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#18181b" />
+      <stop offset="100%" stop-color="#09090b" />
+    </linearGradient>
+    <linearGradient id="lensGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#27272a" />
+      <stop offset="100%" stop-color="#141416" />
+    </linearGradient>
+    <linearGradient id="glowGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" />
+      <stop offset="100%" stop-color="#818cf8" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="512" height="512" rx="112" fill="url(#bgGrad)" />
+       <rect x="2" y="2" width="508" height="508" rx="110" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="2" />
+
+  <!-- Camera Body -->
+  <g transform="translate(0, 0)">
+    <!-- Top bridge & body -->
+    <path d="M128 180 C128 156 148 136 172 136 L208 136 L232 104 L280 104 L304 136 L340 136 C364 136 384 156 384 180 L384 360 C384 384 364 404 340 404 L172 404 C148 404 128 384 128 360 Z"
+          fill="none"
+          stroke="#f4f4f5"
+          stroke-width="20"
+          stroke-linejoin="round"
+          stroke-linecap="round" />
+
+    <!-- Flash / Viewfinder dot -->
+    <circle cx="342" cy="182" r="14" fill="#38bdf8" />
+
+    <!-- Lens Outer Ring -->
+    <circle cx="256" cy="270" r="76" fill="url(#lensGrad)" stroke="#f4f4f5" stroke-width="18" />
+
+    <!-- Inner Aperture / Sync circle -->
+    <circle cx="256" cy="270" r="42" fill="none" stroke="url(#glowGrad)" stroke-width="12" stroke-dasharray="140 40" stroke-linecap="round" />
+
+    <!-- Center optical core -->
+    <circle cx="256" cy="270" r="18" fill="#f4f4f5" />
+  </g>
+</svg>

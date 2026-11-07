@@ -1,5 +1,6 @@
 import { io, Socket } from 'socket.io-client'
 import { createButton, createInput, createModal, createSpinner, createStatusBadge } from "../utils/UIKit.js"
+import { formatDateTime } from "../utils/dateFormat.js"
 
 export let boothSocket: Socket | null = null
 
@@ -806,7 +807,7 @@ export class Settings {
           left.style.cssText = 'display: flex; flex-direction: column; gap: 0.25rem;'
           left.innerHTML = `
             <div style="color: #ccc; font-weight: 500;">Session: ${job.sessionId}</div>
-            <div style="color: #666; font-size: 0.65rem; margin-top: 2px;">${new Date(job.createdAt).toLocaleString()}</div>
+            <div style="color: #666; font-size: 0.65rem; margin-top: 2px;">${formatDateTime(job.createdAt)}</div>
             <div style="color: ${statusColor}; margin-top: 4px;">${job.status.toUpperCase()}</div>
           `
 
@@ -2044,7 +2045,7 @@ export class Settings {
           else if (job.status === 'failed') statusColor = '#f44336'
           else if (job.status === 'uploading') statusColor = '#2196F3'
 
-          const formatTime = (ts: number | null) => ts ? new Date(ts).toLocaleTimeString() : '--'
+          const formatTime = (ts: number | null) => ts ? formatDateTime(ts) : '--'
           
           let progressHtml = '--'
           if (job.status === 'uploading' || job.status === 'completed') {
@@ -2066,7 +2067,7 @@ export class Settings {
           tr.innerHTML = `
             <td style="padding: 0.75rem;">${job.sessionId}</td>
             <td style="padding: 0.75rem; color: ${statusColor}; font-weight: 500;">${job.status.toUpperCase()}</td>
-            <td style="padding: 0.75rem;">${new Date(job.createdAt).toLocaleTimeString()}</td>
+            <td style="padding: 0.75rem;">${formatDateTime(job.createdAt)}</td>
             <td style="padding: 0.75rem;">${formatTime(job.startedAt)}</td>
             <td style="padding: 0.75rem;">${progressHtml}</td>
             <td style="padding: 0.75rem;">${job.retryCount}</td>

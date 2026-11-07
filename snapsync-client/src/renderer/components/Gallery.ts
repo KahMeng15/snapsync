@@ -36,11 +36,13 @@ const fileSrc = (p: string) => p.startsWith('http') ? p : `file://${p}`
 // Helpers
 // ---------------------------------------------------------------------------
 
+import { formatTime, formatDate } from '../utils/dateFormat'
+
 function formatDateParts(iso: string): { time: string; date: string } {
-  const d = new Date(iso)
-  const time = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
-  const date = d.toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })
-  return { time, date }
+  return {
+    time: formatTime(iso),
+    date: formatDate(iso)
+  }
 }
 
 type StatusKey = QueuedSession['status']

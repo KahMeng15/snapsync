@@ -28,8 +28,26 @@
     <div class="dashboard-grid-full">
       <section class="photo-feed">
         <div class="feed-header">
-          <h2>Photos</h2>
+          <div class="feed-header-left">
+            <h2>Photos</h2>
+            <span v-if="photoSessions.length > 0" class="feed-counter">
+              <span v-if="hasMore">{{ visibleSessions.length }} of </span>{{ photoSessions.length }}
+            </span>
+          </div>
           <div class="feed-header-right">
+            <button
+              @click="refreshAll"
+              :class="['btn-icon', { spinning: isRefreshing }]"
+              :disabled="isRefreshing"
+              title="Refresh and fetch latest photos"
+              style="margin-right: 0.25rem;"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="23 4 23 10 17 10"></polyline>
+                <polyline points="1 20 1 14 7 14"></polyline>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+              </svg>
+            </button>
             <button @click="toggleSelectMode" :class="['btn-icon', { active: selectMode || selectedSessions.size > 0 }]" title="Select Mode" style="margin-right: 0.25rem;">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="9 11 12 14 22 4"></polyline>
@@ -71,7 +89,7 @@
 
         <div :class="['session-list', viewMode, { 'is-select-mode': selectMode }]" ref="feedRef">
           <div
-            v-for="session in photoSessions"
+            v-for="session in visibleSessions"
             :key="session.sessionId"
             :class="['session-card', { selected: selectedSessions.has(session.sessionId) }]"
             @click="selectSession(session)"
@@ -83,6 +101,7 @@
                 :alt="'Session ' + session.sessionId"
                 class="thumb-img"
                 loading="lazy"
+                decoding="async"
                 @load="$event.target.classList.add('loaded')"
               />
               <div v-else-if="session.inProgress" class="thumb-in-progress">
@@ -109,6 +128,17 @@
             <p v-if="showArchive">No photos</p>
             <p v-else>No photos yet. Waiting for captures...</p>
           </div>
+        </div>
+
+        <!-- Lazy loading sentinel & manual load trigger -->
+        <div v-if="hasMore" ref="sentinelRef" class="load-more-container">
+          <button @click="loadMore" class="btn-load-more" :disabled="isLoadingMore">
+            <span v-if="isLoadingMore" class="app-spinner inline-spinner" style="margin-right: 0.25rem;"></span>
+            <span>Load more ({{ photoSessions.length - visibleSessions.length }} remaining)</span>
+          </button>
+        </div>
+        <div v-else-if="photoSessions.length > BATCH_SIZE" class="feed-end-notice">
+          <span>All {{ photoSessions.length }} sessions loaded</span>
         </div>
       </section>
 
@@ -160,7 +190,7 @@
 
 <script setup lang="ts">
 const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, '')
-import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { usePhotosStore } from '../stores/photos'
@@ -172,6 +202,7 @@ import SessionViewer from '../components/SessionViewer.vue'
 import AppTopNav from '../components/ui/AppTopNav.vue'
 import AppPageLayout from '../components/ui/AppPageLayout.vue'
 import axios from 'axios'
+import { toast } from 'vue3-toastify'
 
 const route = useRoute()
 const router = useRouter()
@@ -179,16 +210,80 @@ const authStore = useAuthStore()
 const photosStore = usePhotosStore()
 const { ws, connect, disconnect, sendMessage, subscribe, unsubscribe } = useWebSocket()
 
+const BATCH_SIZE = 24
+const displayLimit = ref(BATCH_SIZE)
+const isRefreshing = ref(false)
+const isLoadingMore = ref(false)
+const sentinelRef = ref<HTMLElement | null>(null)
+let observer: IntersectionObserver | null = null
+
 let confirmResolve: ((value: boolean) => void) | null = null
 const confirmState = ref<{ message: string; confirmLabel: string } | null>(null)
 const viewMode = ref<'grid-sm' | 'grid-lg' | 'list'>((localStorage.getItem('snapsync_viewMode') as any) || 'grid-sm')
 const selectedSessions = ref<Set<string>>(new Set())
 
+const visibleSessions = computed(() => {
+  return photoSessions.value.slice(0, displayLimit.value)
+})
+
+const hasMore = computed(() => {
+  return displayLimit.value < photoSessions.value.length
+})
+
+async function loadMore() {
+  if (isLoadingMore.value || !hasMore.value) return
+  isLoadingMore.value = true
+  displayLimit.value = Math.min(displayLimit.value + BATCH_SIZE, photoSessions.value.length)
+  await nextTick()
+  isLoadingMore.value = false
+}
+
+function setupObserver() {
+  cleanupObserver()
+  if (!sentinelRef.value || typeof IntersectionObserver === 'undefined') return
+
+  observer = new IntersectionObserver(
+    (entries) => {
+      const entry = entries[0]
+      if (entry && entry.isIntersecting && hasMore.value && !isLoadingMore.value) {
+        loadMore()
+      }
+    },
+    {
+      root: null,
+      rootMargin: '400px',
+      threshold: 0.05
+    }
+  )
+  observer.observe(sentinelRef.value)
+}
+
+function cleanupObserver() {
+  if (observer) {
+    observer.disconnect()
+    observer = null
+  }
+}
+
+watch(sentinelRef, (newVal) => {
+  if (newVal) {
+    setupObserver()
+  } else {
+    cleanupObserver()
+  }
+})
+
 watch(() => route.query.session, (sessionId) => {
   if (sessionId) {
-    const session = photoSessions.value.find((s: any) => s.sessionId === sessionId)
-    if (session && photosStore.selectedSession?.sessionId !== sessionId) {
-      photosStore.selectSession(session)
+    const sessionIdx = photoSessions.value.findIndex((s: any) => s.sessionId === sessionId)
+    if (sessionIdx !== -1) {
+      if (sessionIdx >= displayLimit.value) {
+        displayLimit.value = Math.ceil((sessionIdx + 1) / BATCH_SIZE) * BATCH_SIZE
+      }
+      const session = photoSessions.value[sessionIdx]
+      if (session && photosStore.selectedSession?.sessionId !== sessionId) {
+        photosStore.selectSession(session)
+      }
     }
   } else {
     if (photosStore.selectedSession) {
@@ -241,7 +336,8 @@ function toggleArchive() {
   showArchive.value = !showArchive.value
   selectedSessions.value.clear()
   selectMode.value = false
-  loadSessions()
+  displayLimit.value = BATCH_SIZE
+  loadSessions(true)
 }
 
 function toggleSelectMode() {
@@ -270,6 +366,8 @@ onMounted(async () => {
   event.value = data.event
 
   await loadSessions()
+  await nextTick()
+  setupObserver()
 
   const socket = connect()
   if (!socket) return
@@ -370,6 +468,7 @@ const connPollInterval = setInterval(() => {
 }, 10000)
 
 onUnmounted(() => {
+  cleanupObserver()
   clearInterval(pollInterval)
   clearInterval(connPollInterval)
   if (wideMq) wideMq.removeEventListener('change', closePanelOnWide)
@@ -378,8 +477,8 @@ onUnmounted(() => {
 })
 
 let isLoadingSessions = false
-async function loadSessions() {
-  if (isLoadingSessions) return
+async function loadSessions(force = false) {
+  if (isLoadingSessions && !force) return
   isLoadingSessions = true
   const eventId = route.params.id as string
   try {
@@ -392,10 +491,51 @@ async function loadSessions() {
     } else {
       photoSessions.value = data.sessions
     }
+    if (displayLimit.value < BATCH_SIZE) {
+      displayLimit.value = BATCH_SIZE
+    }
   } catch (err) {
     console.error('Failed to load sessions', err)
   } finally {
     isLoadingSessions = false
+  }
+}
+
+async function refreshAll() {
+  if (isRefreshing.value) return
+  isRefreshing.value = true
+  const startTime = Date.now()
+  const eventId = route.params.id as string
+
+  try {
+    const [eventRes] = await Promise.all([
+      axios.get(`/api/admin/events/${eventId}`, {
+        params: { _t: Date.now() },
+        headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
+      }),
+      loadSessions(true)
+    ])
+
+    if (eventRes.data?.event) {
+      event.value = eventRes.data.event
+    }
+
+    if (!ws.value?.connected) {
+      retryConnection()
+    } else {
+      subscribe(eventId)
+    }
+
+    toast.success('Gallery refreshed', { autoClose: 1500 })
+  } catch (err: any) {
+    console.error('Failed to refresh gallery', err)
+    toast.error('Failed to refresh photos')
+  } finally {
+    const elapsed = Date.now() - startTime
+    if (elapsed < 400) {
+      await new Promise(resolve => setTimeout(resolve, 400 - elapsed))
+    }
+    isRefreshing.value = false
   }
 }
 
@@ -476,11 +616,10 @@ async function deleteSelected() {
   } catch {}
 }
 
+import { formatDateTime } from '@/utils/dateFormat'
+
 function formatTime(ts: string) {
-  const d = new Date(ts)
-  const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true })
-  const date = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
-  return `${time}, ${date}`
+  return formatDateTime(ts)
 }
 </script>
 
@@ -651,6 +790,10 @@ function formatTime(ts: string) {
   border-radius: var(--radius-sm);
   cursor: pointer;
   line-height: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
 }
 
 .btn-icon:hover {
@@ -662,6 +805,15 @@ function formatTime(ts: string) {
   background: var(--color-border);
   color: var(--color-text);
   border-color: var(--color-info);
+}
+
+.btn-icon:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-icon.spinning svg {
+  animation: spin 0.8s linear infinite;
 }
 
 .dashboard-grid {
@@ -681,6 +833,22 @@ function formatTime(ts: string) {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 1rem;
+}
+
+.feed-header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+.feed-counter {
+  font-size: var(--text-xs);
+  color: var(--color-text-sub);
+  font-weight: 500;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  padding: 0.125rem 0.5rem;
+  border-radius: var(--radius-pill);
 }
 
 .feed-header h2 {
@@ -1058,5 +1226,45 @@ function formatTime(ts: string) {
   .remote-sidebar {
     top: 5rem;
   }
+}
+
+.load-more-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 1.5rem 0 1rem;
+}
+
+.btn-load-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1.25rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-sub);
+  border-radius: var(--radius-md);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-load-more:hover:not(:disabled) {
+  border-color: var(--color-text-muted);
+  color: var(--color-text);
+  background: var(--color-surface-hover, rgba(255, 255, 255, 0.05));
+}
+
+.btn-load-more:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.feed-end-notice {
+  text-align: center;
+  padding: 1.5rem 0 1rem;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
 }
 </style>

@@ -9,7 +9,7 @@ import { boothAuthMiddleware, authMiddleware, checkOtpRateLimit, recordFailedOtp
 import { io, operatorSubscriptions } from '../server'
 import { processSinglePhoto, generateThumbnail, compileVerticalStrip, applyFrame } from '../pipeline'
 import { getActiveFrames } from '../utils/frames'
-import { ensurePhotoSession, getEventByOtp, updateEventSettingsById, getCameraSettings, updateCameraSettings, reservePhotoSession, updateUploadStatus, listEventPhotoSessions, setSessionDimensions, getEmailSendsBySession, createSessionShare, getSessionShares, createEmailSend, updateEmailSendStatus, getGlobalEmailDefaults } from '@snapsync/shared'
+import { ensurePhotoSession, getEventByOtp, updateEventSettingsById, getCameraSettings, updateCameraSettings, reservePhotoSession, updateUploadStatus, listEventPhotoSessions, setSessionDimensions, getEmailSendsBySession, createSessionShare, getSessionShares, createEmailSend, updateEmailSendStatus, getGlobalEmailDefaults, getPhotoSession, formatDate, formatTime, formatDateTime, getServerTimeZone } from '@snapsync/shared'
 import sharp from 'sharp'
 import { isSmtpConfigured, sendShareEmail, resolveEmailContent, renderTemplate } from '../utils/email'
 
@@ -490,40 +490,46 @@ router.post('/email-session', async (req: Request, res: Response) => {
   const baseUrl = process.env.VITE_SHARE_BASE_URL || (process.env.SHARE_BASE_URL ? `${process.env.SHARE_BASE_URL.replace(/\/$/, '')}/share` : `${req.protocol}://${req.get('host')}/share`);
   const shareUrl = `${baseUrl.replace(/\/$/, '')}/${shareId}`
 
-  const eventDateObj = new Date(event.created_at || Date.now())
-  const eventDate = eventDateObj.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })
-  const eventTime = eventDateObj.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
-
-  const renderedBody = renderTemplate(template.body, {
-    shareUrl,
-    eventName: event.name,
-    photoCount: event.photo_count,
-    organizer: event.organizer || '',
-    contactInfo: event.contact_info || '',
-    eventDate,
-    eventTime,
-    shareTitle: ''
-  })
-
-  const renderedSubject = renderTemplate(template.subject, {
-    eventName: event.name,
-    photoCount: event.photo_count,
-    organizer: event.organizer || '',
-    eventDate,
-    eventTime
-  })
-
-  const emailSendId = createEmailSend({
-    sessionId,
-    eventId: event.id,
-    shareId: shareId!,
-    recipientEmail,
-    sentByName: 'Booth Guest'
-  })
-
   try {
     const { getSessionPhotoAttachments } = await import('../utils/email')
     const attachments = await getSessionPhotoAttachments(event, sessionId)
+    const photoCount = attachments.length || 1
+
+    const session = getPhotoSession(sessionId)
+    const sessionTimeRaw = session?.created_at || (sessionId.startsWith('session_') ? Number(sessionId.replace('session_', '')) : null) || event.created_at || Date.now()
+    const serverTz = getServerTimeZone()
+    const eventDate = formatDate(sessionTimeRaw, serverTz)
+    const eventTime = formatTime(sessionTimeRaw, serverTz)
+    const eventDateTime = formatDateTime(sessionTimeRaw, serverTz)
+
+    const renderedBody = renderTemplate(template.body, {
+      shareUrl,
+      eventName: event.name,
+      photoCount,
+      organizer: event.organizer || '',
+      contactInfo: event.contact_info || '',
+      eventDate,
+      eventTime,
+      eventDateTime,
+      shareTitle: ''
+    })
+
+    const renderedSubject = renderTemplate(template.subject, {
+      eventName: event.name,
+      photoCount,
+      organizer: event.organizer || '',
+      eventDate,
+      eventTime,
+      eventDateTime
+    })
+
+    const emailSendId = createEmailSend({
+      sessionId,
+      eventId: event.id,
+      shareId: shareId!,
+      recipientEmail,
+      sentByName: 'Booth Guest'
+    })
 
     const result = await sendShareEmail({
       to: recipientEmail,

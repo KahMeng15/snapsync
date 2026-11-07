@@ -67,6 +67,20 @@
         <div class="nav-separator"></div>
       </template>
 
+      <!-- Install App Button (When installable) -->
+      <button
+        v-if="isInstallable"
+        @click="promptInstall"
+        class="nav-icon install-app-btn"
+        title="Install snapsync App"
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="7 10 12 15 17 10"/>
+          <line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+      </button>
+
       <!-- User Dropdown (Always visible) -->
       <UserDropdown />
     </div>
@@ -77,7 +91,10 @@
 import { computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '../../stores/auth'
+import { usePwaInstall } from '../../composables/usePwaInstall'
 import UserDropdown from './UserDropdown.vue'
+
+const { isInstallable, promptInstall } = usePwaInstall()
 
 onMounted(() => {
   document.body.classList.add('has-bottom-nav')

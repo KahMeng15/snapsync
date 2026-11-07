@@ -2,7 +2,7 @@ import sharp from 'sharp'
 import type { OverlayOptions } from 'sharp'
 import path from 'path'
 import fs from 'fs/promises'
-import { config } from '@snapsync/shared'
+import { config, formatDate, formatTime, formatDateTime, getServerTimeZone } from '@snapsync/shared'
 import { logger } from '@snapsync/shared'
 
 export interface ProcessedImage {
@@ -283,11 +283,14 @@ export async function applyFrame(
   if (frameConfig.texts && frameConfig.texts.length > 0) {
     let svgInner = ''
     
+    const serverTz = getServerTimeZone()
+    const now = new Date()
     for (const t of frameConfig.texts) {
       const content = escapeXml(
         t.text
-          .replace(/{{date}}/g, new Date().toLocaleDateString())
-          .replace(/{{time}}/g, new Date().toLocaleTimeString())
+          .replace(/{{datetime}}/g, formatDateTime(now, serverTz))
+          .replace(/{{date}}/g, formatDate(now, serverTz))
+          .replace(/{{time}}/g, formatTime(now, serverTz))
           .replace(/{{filename}}/g, outputBaseName)
       )
       

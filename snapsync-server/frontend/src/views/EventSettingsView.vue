@@ -289,7 +289,7 @@
             <div v-for="op in operators" :key="op.id" class="field-row">
               <div class="op-info">
                 <strong>{{ op.name }}</strong>
-                <div class="op-meta">Created {{ new Date(op.created_at).toLocaleDateString() }}</div>
+                <div class="op-meta">Created {{ formatDateTime(op.created_at) }}</div>
               </div>
               <div class="op-actions">
                 <AppButton variant="secondary" size="sm" @click="copyOperatorLink(op)">Copy Link</AppButton>
@@ -450,6 +450,7 @@ import axios from 'axios'
 import { toast } from 'vue3-toastify'
 
 import { useAuthStore } from '../stores/auth'
+import { formatDateTime } from '@/utils/dateFormat'
 
 const router = useRouter()
 const route = useRoute()

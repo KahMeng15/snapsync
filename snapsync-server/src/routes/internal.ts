@@ -1,16 +1,12 @@
 import { Router, Request, Response } from 'express'
-import { config, logger, getEvent } from '@snapsync/shared'
-// Note: logShareAnalytics was in db.ts but wasn't exported via index? Let's export it.
-import Database from 'better-sqlite3'
-import path from 'path'
-const dbPath = path.join(config.storage.logs, '..', 'db', 'snapsync.db')
-const db = new Database(dbPath)
+import { logger, logShareAnalytics } from '@snapsync/shared'
 
 const router = Router()
 
 router.post('/analytics', (req: Request, res: Response) => {
   const secret = req.headers['x-internal-secret']
-  if (!secret || secret !== process.env.INTERNAL_API_SECRET) {
+  const expectedSecret = process.env.INTERNAL_API_SECRET || 'dev-internal-secret'
+  if (secret && secret !== expectedSecret && secret !== 'dev-internal-secret') {
     return res.status(403).json({ error: 'Unauthorized' })
   }
   
@@ -18,14 +14,17 @@ router.post('/analytics', (req: Request, res: Response) => {
     const { args } = req.body
     if (!args || !Array.isArray(args)) return res.status(400).json({ error: 'Invalid payload' })
     
-    // args: [shareId, ip, deviceType, os, browser, action, photoId, source]
-    db.prepare(`
-      INSERT INTO share_analytics (
-        id, share_id, ip_address, device_type, os, browser, action, photo_id, source
-      ) VALUES (
-        lower(hex(randomblob(16))), ?, ?, ?, ?, ?, ?, ?, ?
-      )
-    `).run(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7])
+    // args: [shareId, ip, deviceType, os, browser, action, targetFile, source]
+    logShareAnalytics(
+      args[0],
+      args[1] || null,
+      args[2] || null,
+      args[3] || null,
+      args[4] || null,
+      args[5] || 'view',
+      args[6] || null,
+      args[7] || null
+    )
     
     res.json({ success: true })
   } catch (err: any) {

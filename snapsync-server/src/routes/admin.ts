@@ -21,7 +21,7 @@ import {
   updateEventMessages, createEvent, updateEventById, getEvent, listEvents,
   endEvent, deleteEvent, listEventPhotoSessions,
   updateEventSettingsById, getGlobalSettings, updateGlobalSettings,
-  archiveSession, restoreSession, getEventAnalytics,
+  archiveSession, restoreSession, getEventAnalytics, seedEventAnalytics,
   getAllUsers, insertUser, deleteUser, findUserByEmail, findUserById, updateUser, clearSuperAdmins, regenerateSessionShareId, setEventShareOriginals,
   getSessionShares, createSessionShare, setSessionShareStatus, deleteSessionShare, setSessionDimensions, addEventOperator, listEventOperators, deleteEventOperator, getOrCreateEventShareToken,
   regenerateEventOtp, getEventFullExportData, importEventData
@@ -613,6 +613,28 @@ router.get('/events/:id/analytics', async (req: Request, res: Response) => {
   try {
     const analytics = getEventAnalytics(req.params.id)
     res.json(analytics)
+  } catch (error: any) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
+router.post('/events/:id/analytics/seed', async (req: Request, res: Response) => {
+  try {
+    const count = req.body?.count ? parseInt(req.body.count) : 24
+    const result = seedEventAnalytics(req.params.id, { count })
+    const analytics = getEventAnalytics(req.params.id)
+    res.json({ ...result, analytics })
+  } catch (error: any) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
+router.post('/events/:id/analytics/seed', async (req: Request, res: Response) => {
+  try {
+    const count = req.body?.count ? parseInt(req.body.count) : 24
+    const result = seedEventAnalytics(req.params.id, { count })
+    const analytics = getEventAnalytics(req.params.id)
+    res.json({ ...result, analytics })
   } catch (error: any) {
     res.status(500).json({ error: error.message })
   }
@@ -1630,7 +1652,8 @@ router.post('/share/create', async (req: Request, res: Response) => {
 // --- Email Share Routes ---
 import {
   createEmailSend, getEmailSendsBySession, updateEmailSendStatus, 
-  getGlobalEmailDefaults, updateGlobalEmailDefaults, updateEventEmailSettings
+  getGlobalEmailDefaults, updateGlobalEmailDefaults, updateEventEmailSettings,
+  getPhotoSession, formatDate, formatTime, formatDateTime, getServerTimeZone
 } from '@snapsync/shared'
 import { isSmtpConfigured, getSmtpInfo, resolveEmailContent, renderTemplate, sendShareEmail, BUILT_IN_SUBJECT, BUILT_IN_BODY } from '../utils/email'
 
@@ -1762,31 +1785,37 @@ router.post('/events/:eventId/sessions/:sessionId/email', async (req: Request, r
     const baseUrl = process.env.VITE_SHARE_BASE_URL || (process.env.SHARE_BASE_URL ? `${process.env.SHARE_BASE_URL.replace(/\/$/, '')}/share` : `${req.protocol}://${req.get('host')}/share`);
     const shareUrl = `${baseUrl.replace(/\/$/, '')}/${shareId}`
 
-    const eventDateObj = new Date(event.created_at || Date.now())
-    const eventDate = eventDateObj.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })
-    const eventTime = eventDateObj.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+    const { getSessionPhotoAttachments } = await import('../utils/email')
+    const attachments = await getSessionPhotoAttachments(event, sessionId)
+    const photoCount = attachments.length || 1
+
+    const session = getPhotoSession(sessionId)
+    const sessionTimeRaw = session?.created_at || (sessionId.startsWith('session_') ? Number(sessionId.replace('session_', '')) : null) || event.created_at || Date.now()
+    const serverTz = getServerTimeZone()
+    const eventDate = formatDate(sessionTimeRaw, serverTz)
+    const eventTime = formatTime(sessionTimeRaw, serverTz)
+    const eventDateTime = formatDateTime(sessionTimeRaw, serverTz)
 
     const renderedBody = renderTemplate(template.body, {
       shareUrl,
       eventName: event.name,
-      photoCount: event.photo_count,
+      photoCount,
       organizer: event.organizer || '',
       contactInfo: event.contact_info || '',
       eventDate,
       eventTime,
+      eventDateTime,
       shareTitle: ''
     })
 
     const renderedSubject = renderTemplate(template.subject, {
       eventName: event.name,
-      photoCount: event.photo_count,
+      photoCount,
       organizer: event.organizer || '',
       eventDate,
-      eventTime
+      eventTime,
+      eventDateTime
     })
-
-    const { getSessionPhotoAttachments } = await import('../utils/email')
-    const attachments = await getSessionPhotoAttachments(event, sessionId)
 
     const result = await sendShareEmail({
       to: recipientEmail,

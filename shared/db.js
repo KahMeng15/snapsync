@@ -41,7 +41,9 @@ exports.setSessionShareStatus = setSessionShareStatus;
 exports.deleteSessionShare = deleteSessionShare;
 exports.getPhotoSessionByShareId = getPhotoSessionByShareId;
 exports.logShareAnalytics = logShareAnalytics;
+exports.getAllEventShareTokens = getAllEventShareTokens;
 exports.getEventAnalytics = getEventAnalytics;
+exports.seedEventAnalytics = seedEventAnalytics;
 exports.findUserByEmail = findUserByEmail;
 exports.findUserById = findUserById;
 exports.insertUser = insertUser;
@@ -1117,24 +1119,384 @@ const insertShareAnalytics = db.prepare(`
 function logShareAnalytics(shareId, ipAddress, deviceType, os, browser, action, targetFile = null, source = null) {
     insertShareAnalytics.run(shareId, ipAddress, deviceType, os, browser, action, targetFile, source);
 }
-const getEventShareIds = db.prepare(`
-  SELECT share_id FROM photo_sessions WHERE event_id = ? AND share_id IS NOT NULL
-`);
+function getAllEventShareTokens(eventId) {
+    const tokens = new Set();
+    try {
+        const sessionShares = db.prepare('SELECT share_id FROM photo_sessions WHERE event_id = ? AND share_id IS NOT NULL').all(eventId);
+        for (const s of sessionShares)
+            if (s.share_id)
+                tokens.add(s.share_id);
+    }
+    catch { }
+    try {
+        const sessionIds = db.prepare('SELECT id FROM photo_sessions WHERE event_id = ?').all(eventId);
+        for (const s of sessionIds)
+            if (s.id)
+                tokens.add(s.id);
+    }
+    catch { }
+    try {
+        const eventShares = db.prepare('SELECT token FROM event_shares WHERE event_id = ?').all(eventId);
+        for (const e of eventShares)
+            if (e.token)
+                tokens.add(e.token);
+    }
+    catch { }
+    try {
+        const directShares = db.prepare('SELECT ss.id FROM session_shares ss JOIN photo_sessions ps ON ss.session_id = ps.id WHERE ps.event_id = ?').all(eventId);
+        for (const d of directShares)
+            if (d.id)
+                tokens.add(d.id);
+    }
+    catch { }
+    return Array.from(tokens);
+}
 function getEventAnalytics(eventId) {
-    const shareIds = getEventShareIds.all(eventId).map(r => r.share_id);
-    if (shareIds.length === 0)
-        return { totalVisits: 0, uniqueVisitors: 0, logs: [] };
-    const placeholders = shareIds.map(() => '?').join(',');
-    const totalVisits = db.prepare(`
-    SELECT COUNT(*) as count FROM share_analytics WHERE share_id IN (${placeholders}) AND action = 'view'
-  `).get(...shareIds).count;
-    const uniqueVisitors = db.prepare(`
-    SELECT COUNT(DISTINCT ip_address) as count FROM share_analytics WHERE share_id IN (${placeholders}) AND ip_address IS NOT NULL
-  `).get(...shareIds).count;
-    const logs = db.prepare(`
-    SELECT * FROM share_analytics WHERE share_id IN (${placeholders}) ORDER BY created_at DESC LIMIT 100
-  `).all(...shareIds);
-    return { totalVisits, uniqueVisitors, logs };
+    const event = getEvent(eventId);
+    // Session statistics
+    const sessionStats = db.prepare(`
+    SELECT 
+      COUNT(*) as total,
+      SUM(CASE WHEN upload_status = 'complete' THEN 1 ELSE 0 END) as completed,
+      SUM(CASE WHEN archived = 1 THEN 1 ELSE 0 END) as archived,
+      SUM(COALESCE(upload_size_bytes, 0)) as total_bytes,
+      AVG(CASE WHEN upload_avg_speed_kbps > 0 THEN upload_avg_speed_kbps ELSE NULL END) as avg_speed,
+      MIN(created_at) as first_session,
+      MAX(created_at) as last_session
+    FROM photo_sessions 
+    WHERE event_id = ?
+  `).get(eventId) || { total: 0, completed: 0, archived: 0, total_bytes: 0, avg_speed: 0 };
+    const photoCountPerSession = event?.photo_count || 4;
+    const totalPhotos = (sessionStats.completed || 0) * photoCountPerSession;
+    // Email statistics
+    let emailStats = { total: 0, sent: 0, failed: 0 };
+    try {
+        const emails = db.prepare(`
+      SELECT 
+        COUNT(*) as total,
+        SUM(CASE WHEN status = 'sent' THEN 1 ELSE 0 END) as sent,
+        SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed
+      FROM email_sends 
+      WHERE event_id = ?
+    `).get(eventId);
+        if (emails) {
+            emailStats = {
+                total: emails.total || 0,
+                sent: emails.sent || 0,
+                failed: emails.failed || 0
+            };
+        }
+    }
+    catch { }
+    const shareTokens = getAllEventShareTokens(eventId);
+    let totalVisits = 0;
+    let uniqueVisitors = 0;
+    let totalDownloads = 0;
+    let photoDownloads = 0;
+    let zipDownloads = 0;
+    let qrScans = 0;
+    let directVisits = 0;
+    let logs = [];
+    let devicesBreakdown = [];
+    let osBreakdown = [];
+    let browsersBreakdown = [];
+    let topDownloads = [];
+    if (shareTokens.length > 0) {
+        const placeholders = shareTokens.map(() => '?').join(',');
+        const counts = db.prepare(`
+      SELECT 
+        SUM(CASE WHEN action = 'view' THEN 1 ELSE 0 END) as views,
+        COUNT(DISTINCT CASE WHEN ip_address IS NOT NULL AND ip_address != '' THEN ip_address ELSE NULL END) as uniques,
+        SUM(CASE WHEN action = 'download' THEN 1 ELSE 0 END) as downloads,
+        SUM(CASE WHEN action = 'download' AND (target_file != 'all' OR target_file IS NULL) THEN 1 ELSE 0 END) as photo_downloads,
+        SUM(CASE WHEN action = 'download' AND target_file = 'all' THEN 1 ELSE 0 END) as zip_downloads,
+        SUM(CASE WHEN source = 'qr' THEN 1 ELSE 0 END) as qr_count,
+        SUM(CASE WHEN source != 'qr' OR source IS NULL THEN 1 ELSE 0 END) as direct_count
+      FROM share_analytics 
+      WHERE share_id IN (${placeholders})
+    `).get(...shareTokens);
+        if (counts) {
+            totalVisits = counts.views || 0;
+            uniqueVisitors = counts.uniques || 0;
+            totalDownloads = counts.downloads || 0;
+            photoDownloads = counts.photo_downloads || 0;
+            zipDownloads = counts.zip_downloads || 0;
+            qrScans = counts.qr_count || 0;
+            directVisits = counts.direct_count || 0;
+        }
+        logs = db.prepare(`
+      SELECT id, share_id, ip_address, device_type, os, browser, action, target_file, source, created_at 
+      FROM share_analytics 
+      WHERE share_id IN (${placeholders}) 
+      ORDER BY created_at DESC 
+      LIMIT 100
+    `).all(...shareTokens);
+        devicesBreakdown = db.prepare(`
+      SELECT COALESCE(NULLIF(device_type, ''), 'Desktop') as name, COUNT(*) as count 
+      FROM share_analytics 
+      WHERE share_id IN (${placeholders}) 
+      GROUP BY name 
+      ORDER BY count DESC
+    `).all(...shareTokens);
+        osBreakdown = db.prepare(`
+      SELECT COALESCE(NULLIF(os, ''), 'Unknown') as name, COUNT(*) as count 
+      FROM share_analytics 
+      WHERE share_id IN (${placeholders}) 
+      GROUP BY name 
+      ORDER BY count DESC
+    `).all(...shareTokens);
+        browsersBreakdown = db.prepare(`
+      SELECT COALESCE(NULLIF(browser, ''), 'Unknown') as name, COUNT(*) as count 
+      FROM share_analytics 
+      WHERE share_id IN (${placeholders}) 
+      GROUP BY name 
+      ORDER BY count DESC
+    `).all(...shareTokens);
+        topDownloads = db.prepare(`
+      SELECT target_file as file, COUNT(*) as count 
+      FROM share_analytics 
+      WHERE share_id IN (${placeholders}) AND action = 'download' AND target_file IS NOT NULL AND target_file != ''
+      GROUP BY target_file 
+      ORDER BY count DESC 
+      LIMIT 8
+    `).all(...shareTokens);
+    }
+    // Calculate percentages
+    const totalDeviceActions = devicesBreakdown.reduce((sum, d) => sum + d.count, 0) || 1;
+    devicesBreakdown = devicesBreakdown.map(d => ({ ...d, percent: Math.round((d.count / totalDeviceActions) * 100) }));
+    const totalOsActions = osBreakdown.reduce((sum, d) => sum + d.count, 0) || 1;
+    osBreakdown = osBreakdown.map(d => ({ ...d, percent: Math.round((d.count / totalOsActions) * 100) }));
+    const totalBrowserActions = browsersBreakdown.reduce((sum, d) => sum + d.count, 0) || 1;
+    browsersBreakdown = browsersBreakdown.map(d => ({ ...d, percent: Math.round((d.count / totalBrowserActions) * 100) }));
+    const sourcesTotal = (qrScans + directVisits) || 1;
+    const sourcesBreakdown = [
+        { name: 'QR Code', count: qrScans, percent: Math.round((qrScans / sourcesTotal) * 100) },
+        { name: 'Direct Link', count: directVisits, percent: Math.round((directVisits / sourcesTotal) * 100) }
+    ];
+    // Hourly timeline aggregation (sessions created + views + downloads)
+    const hourlyMap = new Map();
+    // 1. Sessions timeline
+    const sessionHours = db.prepare(`
+    SELECT strftime('%Y-%m-%d %H:00', created_at) as hour, COUNT(*) as count
+    FROM photo_sessions
+    WHERE event_id = ?
+    GROUP BY hour
+    ORDER BY hour ASC
+  `).all(eventId);
+    for (const s of sessionHours) {
+        if (!hourlyMap.has(s.hour)) {
+            hourlyMap.set(s.hour, { hour: s.hour, sessions: 0, views: 0, downloads: 0 });
+        }
+        hourlyMap.get(s.hour).sessions += s.count;
+    }
+    // 2. Share analytics timeline
+    if (shareTokens.length > 0) {
+        const placeholders = shareTokens.map(() => '?').join(',');
+        const logHours = db.prepare(`
+      SELECT 
+        strftime('%Y-%m-%d %H:00', created_at) as hour,
+        SUM(CASE WHEN action = 'view' THEN 1 ELSE 0 END) as views,
+        SUM(CASE WHEN action = 'download' THEN 1 ELSE 0 END) as downloads
+      FROM share_analytics
+      WHERE share_id IN (${placeholders})
+      GROUP BY hour
+      ORDER BY hour ASC
+    `).all(...shareTokens);
+        for (const l of logHours) {
+            if (!hourlyMap.has(l.hour)) {
+                hourlyMap.set(l.hour, { hour: l.hour, sessions: 0, views: 0, downloads: 0 });
+            }
+            const entry = hourlyMap.get(l.hour);
+            entry.views += l.views;
+            entry.downloads += l.downloads;
+        }
+    }
+    const hourlyTimeline = Array.from(hourlyMap.values()).sort((a, b) => a.hour.localeCompare(b.hour));
+    // Find peak hour
+    let peakHour = null;
+    let maxActivity = 0;
+    for (const h of hourlyTimeline) {
+        const act = h.sessions + h.views + h.downloads;
+        if (act > maxActivity) {
+            maxActivity = act;
+            peakHour = h.hour;
+        }
+    }
+    // Combined rich recent activity (sessions + views + downloads + emails)
+    const combinedActivity = [];
+    for (const l of logs) {
+        combinedActivity.push({
+            id: `share_${l.id}`,
+            type: l.action === 'download' ? 'download' : 'view',
+            title: l.action === 'download' ? `Downloaded ${l.target_file === 'all' ? 'All Photos (.zip)' : (l.target_file || 'photo')}` : 'Viewed Photo Gallery',
+            created_at: l.created_at,
+            source: l.source || 'direct',
+            device: `${l.device_type || 'Desktop'} · ${l.os || 'Unknown'}`,
+            browser: l.browser || 'Unknown',
+            ip: l.ip_address || '-',
+            target: l.target_file || null
+        });
+    }
+    // Per-session statistics (views, unique visitors, individual downloads, zip downloads)
+    const perSessionRows = db.prepare(`
+    SELECT 
+      ps.id,
+      ps.share_id,
+      ps.created_at,
+      ps.upload_status,
+      ps.archived,
+      ps.share_title,
+      (
+        SELECT COUNT(*) FROM share_analytics sa 
+        WHERE (sa.share_id = ps.share_id OR sa.share_id = ps.id OR sa.share_id IN (SELECT id FROM session_shares WHERE session_id = ps.id))
+          AND sa.action = 'view'
+      ) as views,
+      (
+        SELECT COUNT(DISTINCT sa.ip_address) FROM share_analytics sa 
+        WHERE (sa.share_id = ps.share_id OR sa.share_id = ps.id OR sa.share_id IN (SELECT id FROM session_shares WHERE session_id = ps.id))
+          AND sa.ip_address IS NOT NULL AND sa.ip_address != ''
+      ) as unique_visitors,
+      (
+        SELECT COUNT(*) FROM share_analytics sa 
+        WHERE (
+          ((sa.share_id = ps.share_id OR sa.share_id = ps.id OR sa.share_id IN (SELECT id FROM session_shares WHERE session_id = ps.id)) AND (sa.target_file != 'all' OR sa.target_file IS NULL))
+          OR (sa.target_file LIKE ps.id || '_%')
+        ) AND sa.action = 'download'
+      ) as individual_downloads,
+      (
+        SELECT COUNT(*) FROM share_analytics sa 
+        WHERE (sa.share_id = ps.share_id OR sa.share_id = ps.id OR sa.share_id IN (SELECT id FROM session_shares WHERE session_id = ps.id))
+          AND sa.action = 'download' AND sa.target_file = 'all'
+      ) as zip_downloads
+    FROM photo_sessions ps
+    WHERE ps.event_id = ?
+    ORDER BY ps.created_at DESC
+  `).all(eventId);
+    const perSessionStats = perSessionRows.map(r => ({
+        ...r,
+        views: r.views || 0,
+        unique_visitors: r.unique_visitors || 0,
+        individual_downloads: r.individual_downloads || 0,
+        zip_downloads: r.zip_downloads || 0,
+        total_downloads: (r.individual_downloads || 0) + (r.zip_downloads || 0)
+    }));
+    // Also include recent booth sessions
+    const recentSessions = db.prepare(`
+    SELECT id, created_at, upload_status, upload_size_bytes
+    FROM photo_sessions
+    WHERE event_id = ?
+    ORDER BY created_at DESC
+    LIMIT 20
+  `).all(eventId);
+    for (const s of recentSessions) {
+        combinedActivity.push({
+            id: `session_${s.id}`,
+            type: 'session',
+            title: `Booth Session Captured (${photoCountPerSession} photos)`,
+            created_at: s.created_at,
+            source: 'booth',
+            device: 'Photo Booth',
+            browser: s.upload_status === 'complete' ? 'Completed' : s.upload_status,
+            ip: 'Local Booth',
+            target: s.id
+        });
+    }
+    // Sort combined activity by created_at DESC
+    combinedActivity.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    return {
+        eventId,
+        eventName: event?.name || 'Event',
+        eventDate: event?.date || '',
+        summary: {
+            totalSessions: sessionStats.total || 0,
+            completedSessions: sessionStats.completed || 0,
+            archivedSessions: sessionStats.archived || 0,
+            totalPhotos,
+            totalViews: totalVisits,
+            uniqueVisitors,
+            totalDownloads,
+            photoDownloads,
+            zipDownloads,
+            qrScans,
+            directVisits,
+            emailsSent: emailStats.sent,
+            emailsTotal: emailStats.total,
+            avgSessionSpeedKbps: Math.round(sessionStats.avg_speed || 0),
+            totalDataBytes: sessionStats.total_bytes || 0,
+            firstSessionAt: sessionStats.first_session,
+            lastSessionAt: sessionStats.last_session
+        },
+        breakdowns: {
+            devices: devicesBreakdown,
+            os: osBreakdown,
+            browsers: browsersBreakdown,
+            sources: sourcesBreakdown
+        },
+        timeline: {
+            hourly: hourlyTimeline,
+            peakHour
+        },
+        topDownloads,
+        sessions: perSessionStats,
+        activity: combinedActivity.slice(0, 100),
+        // Backward compatibility properties:
+        totalVisits,
+        uniqueVisitors,
+        logs
+    };
+}
+function seedEventAnalytics(eventId, options = {}) {
+    const event = getEvent(eventId);
+    if (!event)
+        throw new Error('Event not found');
+    let sessions = db.prepare('SELECT id, share_id, created_at FROM photo_sessions WHERE event_id = ?').all(eventId);
+    if (sessions.length === 0) {
+        const now = Date.now();
+        for (let i = 0; i < 6; i++) {
+            const sessId = `session_${now - (6 - i) * 18 * 60 * 1000}`;
+            const shareId = require('uuid').v4();
+            const sessTime = new Date(now - (6 - i) * 18 * 60 * 1000).toISOString().replace('T', ' ').substring(0, 19);
+            db.prepare(`
+        INSERT INTO photo_sessions (id, event_id, created_at, share_id, upload_status, width, height, upload_size_bytes, upload_avg_speed_kbps)
+        VALUES (?, ?, ?, ?, 'complete', 1760, 1328, 1500000 + abs(random() % 300000), 500 + abs(random() % 400))
+      `).run(sessId, eventId, sessTime, shareId);
+        }
+        sessions = db.prepare('SELECT id, share_id, created_at FROM photo_sessions WHERE event_id = ?').all(eventId);
+    }
+    const eventShareToken = getOrCreateEventShareToken(eventId);
+    const devices = [
+        { type: 'Mobile', os: 'iOS', browser: 'Mobile Safari', ipBase: '172.56.21.' },
+        { type: 'Mobile', os: 'Android', browser: 'Chrome Mobile', ipBase: '107.122.45.' },
+        { type: 'Desktop', os: 'macOS', browser: 'Chrome', ipBase: '192.168.1.' },
+        { type: 'Desktop', os: 'Windows', browser: 'Edge', ipBase: '73.189.20.' },
+        { type: 'Tablet', os: 'iOS', browser: 'Mobile Safari', ipBase: '172.56.22.' },
+        { type: 'Mobile', os: 'iOS', browser: 'Instagram in-app', ipBase: '174.204.11.' }
+    ];
+    const count = options.count || 24;
+    for (let i = 0; i < count; i++) {
+        const session = sessions[i % sessions.length];
+        const token = (i % 5 === 0) ? eventShareToken : (session.share_id || session.id);
+        const dev = devices[i % devices.length];
+        const ip = `${dev.ipBase}${10 + (i % 15)}`;
+        const source = (i % 3 === 0) ? 'direct' : 'qr';
+        const baseTime = new Date(session.created_at || event.created_at || new Date()).getTime();
+        const offsetMs = (i * 7 * 60 * 1000) + ((i % 4) * 45 * 1000);
+        const logTime = new Date(baseTime + offsetMs).toISOString().replace('T', ' ').substring(0, 19);
+        db.prepare(`
+      INSERT INTO share_analytics (share_id, ip_address, device_type, os, browser, action, target_file, source, created_at)
+      VALUES (?, ?, ?, ?, ?, 'view', null, ?, ?)
+    `).run(token, ip, dev.type, dev.os, dev.browser, source, logTime);
+        if (i % 2 === 0) {
+            const isZip = i % 4 === 0;
+            const target = isZip ? 'all' : `${session.id}_1.jpg`;
+            const dlTime = new Date(baseTime + offsetMs + 45000).toISOString().replace('T', ' ').substring(0, 19);
+            db.prepare(`
+        INSERT INTO share_analytics (share_id, ip_address, device_type, os, browser, action, target_file, source, created_at)
+        VALUES (?, ?, ?, ?, ?, 'download', ?, ?, ?)
+      `).run(token, ip, dev.type, dev.os, dev.browser, target, source, dlTime);
+        }
+    }
+    return { success: true, count };
 }
 const findUserByEmailStmt = db.prepare('SELECT * FROM users WHERE email = ?');
 const findUserByIdStmt = db.prepare('SELECT * FROM users WHERE id = ?');

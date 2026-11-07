@@ -49,6 +49,8 @@ app.use(helmet({
       scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"], // Needed for Vue in some cases
       styleSrc: ["'self'", "'unsafe-inline'"],
       connectSrc: ["'self'", "ws:", "wss:"],
+      workerSrc: ["'self'"],
+      manifestSrc: ["'self'"],
       frameSrc: ["'none'"],
       objectSrc: ["'none'"],
     }
@@ -70,7 +72,18 @@ app.use(setCsrfToken)
 app.use(requestLogger)
 
 const publicPath = path.join(process.cwd(), 'public');
-const staticOpts = { maxAge: '1y', etag: false, immutable: true, index: false };
+const staticOpts = {
+  maxAge: '1y',
+  etag: false,
+  immutable: true,
+  index: false,
+  setHeaders: (res: express.Response, filePath: string) => {
+    // Service worker and manifest must never be cached permanently
+    if (filePath.endsWith('sw.js') || filePath.endsWith('registerSW.js') || filePath.endsWith('manifest.webmanifest')) {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    }
+  }
+};
 
 app.use(express.static(publicPath, staticOpts));
 
@@ -564,6 +577,7 @@ app.get('*', (req, res) => {
     const envScript = `<script>window.__env__ = ${JSON.stringify(envVars)}</script>`
     const html = data.replace('</head>', `${envScript}</head>`)
     
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
     res.send(html)
   })
 })

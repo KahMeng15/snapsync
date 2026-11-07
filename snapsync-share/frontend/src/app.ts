@@ -1,3 +1,5 @@
+import { formatDateTime } from './dateFormat';
+
 const basePath = '/snapsync';
 
 interface SessionPhoto {
@@ -244,8 +246,7 @@ function render(token: string) {
   createSection('Original Photos', originalPhotos, showSectionTitles);
 
   if (sessionData!.expiresAt) {
-    const d = new Date(sessionData!.expiresAt);
-    $('expiry-text').textContent = `Link expires on ${d.toLocaleString()}`;
+    $('expiry-text').textContent = `Link expires on ${formatDateTime(sessionData!.expiresAt)}`;
   }
 
   $('download-all-btn').onclick = () => {
