@@ -111,6 +111,7 @@ function render(token: string) {
   );
 
   if (animationPhotos.length >= 2) {
+    $('content').classList.add('has-hero');
     $('hero-preview').classList.remove('hidden');
     updateHero();
     heroInterval = window.setInterval(() => {
@@ -118,19 +119,51 @@ function render(token: string) {
       updateHero();
     }, 500);
   } else {
+    $('content').classList.remove('has-hero');
     $('hero-preview').classList.add('hidden');
   }
 
-  const grid = $('photo-grid');
+  const container = $('photos-container');
+  container.innerHTML = '';
+
+  const totalPhotos = sessionData!.photos.length;
+  if (totalPhotos <= 1) {
+    document.body.classList.add('single-photo-mode');
+    $('share-page')?.classList.add('single-photo-mode');
+    $('content')?.classList.add('single-photo-mode');
+    container.classList.add('has-single-photo');
+    $('download-all-btn').classList.add('hidden');
+  } else {
+    document.body.classList.remove('single-photo-mode');
+    $('share-page')?.classList.remove('single-photo-mode');
+    $('content')?.classList.remove('single-photo-mode');
+    container.classList.remove('has-single-photo');
+    $('download-all-btn').classList.remove('hidden');
+  }
+
+  const isOriginal = (p: SessionPhoto) =>
+    p.isOriginal === true || (!p.frameId && p.frameName === 'Original Photos') || p.frameId === 'unframed';
+
+  const framedPhotos: { photo: SessionPhoto; globalIdx: number }[] = [];
+  const originalPhotos: { photo: SessionPhoto; globalIdx: number }[] = [];
+
   sessionData!.photos.forEach((photo, i) => {
+    if (isOriginal(photo)) {
+      originalPhotos.push({ photo, globalIdx: i });
+    } else {
+      framedPhotos.push({ photo, globalIdx: i });
+    }
+  });
+
+  const createPhotoCard = (photo: SessionPhoto, globalIdx: number, isSingle = false) => {
     const thumbUrl = photo.thumbnail || photo.url;
     
     const card = document.createElement('div');
-    card.className = 'photo-card';
+    card.className = isSingle ? 'photo-card is-single' : 'photo-card';
     
     const imgWrap = document.createElement('div');
     imgWrap.className = 'card-img-wrap';
-    imgWrap.onclick = () => openLightbox(i);
+    imgWrap.onclick = () => openLightbox(globalIdx);
 
     const blur = document.createElement('div');
     blur.className = 'blur-bg';
@@ -154,8 +187,43 @@ function render(token: string) {
     btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Download JPEG`;
     card.appendChild(btn);
 
-    grid.appendChild(card);
-  });
+    return card;
+  };
+
+  const createSection = (title: string, items: { photo: SessionPhoto; globalIdx: number }[], showTitle = true) => {
+    if (items.length === 0) return;
+
+    const isSingle = items.length === 1;
+    const section = document.createElement('section');
+    section.className = isSingle ? 'photo-section single-item-section' : 'photo-section';
+
+    if (showTitle) {
+      const header = document.createElement('div');
+      header.className = 'section-header';
+
+      const titleEl = document.createElement('h2');
+      titleEl.className = 'section-title';
+      titleEl.textContent = title;
+
+      header.appendChild(titleEl);
+      section.appendChild(header);
+    }
+
+    const grid = document.createElement('div');
+    grid.className = isSingle ? 'photo-grid single-item' : 'photo-grid';
+
+    items.forEach(({ photo, globalIdx }) => {
+      grid.appendChild(createPhotoCard(photo, globalIdx, isSingle));
+    });
+
+    section.appendChild(grid);
+    container.appendChild(section);
+  };
+
+  const showSectionTitles = originalPhotos.length > 0 && framedPhotos.length > 0;
+
+  createSection('Framed Photos', framedPhotos, showSectionTitles);
+  createSection('Original Photos', originalPhotos, showSectionTitles);
 
   if (sessionData!.expiresAt) {
     const d = new Date(sessionData!.expiresAt);

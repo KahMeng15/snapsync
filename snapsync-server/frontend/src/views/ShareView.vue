@@ -18,7 +18,7 @@
     </div>
 
     <template v-else-if="session">
-      <div class="share-content">
+      <div class="share-content" :class="{ 'has-hero': animationPhotos.length >= 2 }">
         <header class="share-header">
           <h1>{{ session.shareTitle || 'Hello there! Here are your photos!' }}</h1>
           <p class="subtitle">
@@ -36,21 +36,46 @@
           </div>
         </div>
 
-        <div class="photo-grid">
-          <div v-for="(photo, i) in session.photos" :key="photo.id" class="photo-card">
-            <div class="card-img-wrap">
-              <div class="blur-bg" :style="{ backgroundImage: `url(${baseUrl + (photo.thumbnail || photo.url)})` }"></div>
-              <img :src="baseUrl + (photo.thumbnail || photo.url)" :alt="'Photo'" loading="lazy" class="share-img" @load="$event.target.classList.add('loaded')" @click="openPhoto(i)" />
+        <div class="photos-container" :class="{ 'has-single-photo': allPhotos.length === 1 }">
+          <section v-if="framedPhotos.length > 0" class="photo-section" :class="{ 'single-item-section': framedPhotos.length === 1 }">
+            <div v-if="showSectionTitles" class="section-header">
+              <h2 class="section-title">Framed Photos</h2>
             </div>
-            <a :href="getDownloadUrl(photo)" class="download-btn" download>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              Download JPEG
-            </a>
-          </div>
+            <div class="photo-grid" :class="{ 'single-item': framedPhotos.length === 1 }">
+              <div v-for="{ photo, index } in framedPhotos" :key="photo.id" class="photo-card" :class="{ 'is-single': framedPhotos.length === 1 }">
+                <div class="card-img-wrap">
+                  <div class="blur-bg" :style="{ backgroundImage: `url(${baseUrl + (photo.thumbnail || photo.url)})` }"></div>
+                  <img :src="baseUrl + (photo.thumbnail || photo.url)" :alt="'Photo'" loading="lazy" class="share-img" @load="$event.target.classList.add('loaded')" @click="openPhoto(index)" />
+                </div>
+                <a :href="getDownloadUrl(photo)" class="download-btn" download>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  Download JPEG
+                </a>
+              </div>
+            </div>
+          </section>
+
+          <section v-if="originalPhotos.length > 0" class="photo-section" :class="{ 'single-item-section': originalPhotos.length === 1 }">
+            <div v-if="showSectionTitles" class="section-header">
+              <h2 class="section-title">Original Photos</h2>
+            </div>
+            <div class="photo-grid" :class="{ 'single-item': originalPhotos.length === 1 }">
+              <div v-for="{ photo, index } in originalPhotos" :key="photo.id" class="photo-card" :class="{ 'is-single': originalPhotos.length === 1 }">
+                <div class="card-img-wrap">
+                  <div class="blur-bg" :style="{ backgroundImage: `url(${baseUrl + (photo.thumbnail || photo.url)})` }"></div>
+                  <img :src="baseUrl + (photo.thumbnail || photo.url)" :alt="'Photo'" loading="lazy" class="share-img" @load="$event.target.classList.add('loaded')" @click="openPhoto(index)" />
+                </div>
+                <a :href="getDownloadUrl(photo)" class="download-btn" download>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  Download JPEG
+                </a>
+              </div>
+            </div>
+          </section>
         </div>
 
         <div class="actions-wrapper">
-          <button @click="downloadAll" class="btn-download-all">
+          <button v-if="allPhotos.length > 1" @click="downloadAll" class="btn-download-all">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             Download All
           </button>
@@ -204,11 +229,28 @@ watch(selectedPhotoIndex, (idx) => {
   }
 })
 
+const isOriginalPhoto = (photo: SessionPhoto) =>
+  photo.isOriginal === true || (!photo.frameId && photo.frameName === 'Original Photos') || photo.frameId === 'unframed'
+
+const framedPhotos = computed(() => {
+  if (!session.value || !session.value.photos) return []
+  return session.value.photos
+    .map((photo, index) => ({ photo, index }))
+    .filter(({ photo }) => !isOriginalPhoto(photo))
+})
+
+const originalPhotos = computed(() => {
+  if (!session.value || !session.value.photos) return []
+  return session.value.photos
+    .map((photo, index) => ({ photo, index }))
+    .filter(({ photo }) => isOriginalPhoto(photo))
+})
+
+const showSectionTitles = computed(() => framedPhotos.value.length > 0 && originalPhotos.value.length > 0)
+
 const animationPhotos = computed(() => {
   if (!session.value || !session.value.photos) return []
-  return session.value.photos.filter(
-    (photo) => photo.isOriginal === true || (!photo.frameId && photo.frameName === 'Original Photos') || photo.frameId === 'unframed'
-  )
+  return session.value.photos.filter((photo) => isOriginalPhoto(photo))
 })
 
 const expiryText = computed(() => {
@@ -463,6 +505,43 @@ async function downloadAll() {
   width: 100%;
 }
 
+.photos-container {
+  width: 100%;
+  max-width: 1000px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2.5rem;
+}
+
+.photo-section {
+  display: flex;
+  flex-direction: column;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 0 1rem 0.75rem;
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: 1rem;
+}
+
+.section-title {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 0;
+  letter-spacing: -0.01em;
+  text-align: center;
+}
+
+.photo-section .photo-grid {
+  padding: 0.5rem 2rem;
+}
+
 .photo-grid {
   display: flex;
   flex-wrap: wrap;
@@ -483,6 +562,174 @@ async function downloadAll() {
   transition: transform 0.15s;
   display: flex;
   flex-direction: column;
+}
+
+/* Single photo mode: occupies remaining viewport height with proper side padding */
+.share-page.single-photo-mode {
+  height: 100vh;
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow-y: auto;
+}
+
+.single-photo-mode .share-content {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.single-photo-mode .share-header {
+  flex-shrink: 0;
+  padding: 1.25rem 1rem 0.75rem;
+}
+
+.single-photo-mode .share-header h1 {
+  font-size: 1.25rem;
+}
+
+.single-photo-mode .subtitle {
+  font-size: var(--text-xs);
+  margin-top: 0.15rem;
+}
+
+.single-photo-mode .photos-container.has-single-photo {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 540px;
+  margin: 0 auto;
+  padding: 0 1.25rem;
+  gap: 0;
+}
+
+.single-photo-mode .photo-section.single-item-section {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.single-photo-mode .section-header {
+  flex-shrink: 0;
+  padding: 0 0.5rem 0.75rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.single-photo-mode .section-title {
+  font-size: var(--text-sm);
+  color: var(--color-text-sub);
+}
+
+.single-photo-mode .photo-grid.single-item {
+  flex: 1 1 0 !important;
+  min-height: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+  align-items: center !important;
+  width: 100% !important;
+  padding: 0 !important;
+  margin: 0 auto !important;
+}
+
+.single-photo-mode .photo-card.is-single {
+  flex: 1 1 0 !important;
+  min-height: 0 !important;
+  max-height: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+  width: 100% !important;
+  max-width: 540px !important;
+  margin: 0 auto !important;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.single-photo-mode .photo-card.is-single .card-img-wrap {
+  flex: 1 1 0;
+  min-height: 0;
+  height: 100%;
+  width: 100%;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.single-photo-mode .photo-card.is-single .card-img-wrap img,
+.single-photo-mode .photo-card.is-single img,
+.single-photo-mode .photo-card.is-single .share-img {
+  width: 100%;
+  height: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.single-photo-mode .photo-card.is-single .download-btn {
+  flex-shrink: 0;
+  padding: 0.65rem 1rem;
+}
+
+.single-photo-mode .actions-wrapper {
+  flex-shrink: 0;
+  padding: 0.75rem 1rem 0.5rem;
+  margin-bottom: 0;
+}
+
+.single-photo-mode .expiry-text {
+  margin-top: 0;
+}
+
+.single-photo-mode .share-footer {
+  flex-shrink: 0;
+  padding: 0.75rem 1rem 1rem;
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+.photos-container.has-single-photo {
+  max-width: 540px;
+}
+
+.photo-section.single-item-section {
+  max-width: 540px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.photo-grid.single-item {
+  display: flex !important;
+  justify-content: center !important;
+  width: 100% !important;
+  padding: 1rem 0 !important;
+}
+
+.photo-card.is-single {
+  width: 100% !important;
+  max-width: 540px !important;
+  flex: 0 1 auto !important;
+  margin: 0 auto;
+}
+
+.photo-card.is-single .card-img-wrap {
+  width: 100%;
+  min-height: 200px;
+}
+
+.photo-card.is-single .card-img-wrap img,
+.photo-card.is-single .share-img {
+  width: 100%;
+  height: auto;
+  max-height: 85vh;
+  object-fit: contain;
 }
 
 .photo-card:hover {
@@ -618,12 +865,17 @@ async function downloadAll() {
 
 @media (max-width: 640px) {
   .share-header {
-    order: 2;
-    margin-top: -100px;
+    order: 1;
+    margin-top: 0;
     position: relative;
     z-index: 10;
-    padding-top: 1.5rem;
+    padding: 1.5rem 1rem 0.5rem;
     border-bottom: none;
+  }
+  .has-hero .share-header {
+    order: 2;
+    margin-top: -100px;
+    padding-top: 1.5rem;
   }
   .hero-preview {
     order: 1;
@@ -654,10 +906,32 @@ async function downloadAll() {
     max-height: 60vh;
     object-fit: cover;
   }
+  .photos-container {
+    order: 3;
+    gap: 1.5rem;
+  }
+  .section-header {
+    padding: 0 1rem 0.75rem;
+    margin-bottom: 1rem;
+  }
+  .photo-section .photo-grid {
+    padding: 0.5rem 1rem;
+    gap: 1rem;
+  }
   .photo-grid {
     order: 3;
     padding: 1rem;
     gap: 1rem;
+  }
+  .single-photo-mode .photos-container.has-single-photo {
+    padding: 0 1rem !important;
+  }
+  .photo-grid.single-item {
+    padding: 0 !important;
+  }
+  .photo-card.is-single {
+    width: 100% !important;
+    max-width: 100% !important;
   }
   .actions-wrapper {
     order: 4;
