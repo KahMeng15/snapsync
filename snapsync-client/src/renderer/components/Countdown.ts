@@ -24,7 +24,19 @@ export class CountdownUI {
     }
 
     this.messageEl.textContent = message || ''
-    const prepTick = Math.min(seconds, Math.ceil(prepAt))
+    // Clamp prepAt so that live preview is never frozen at the very start of the countdown
+    const effectivePrepAt = (prepAt > 0 && seconds > 1)
+      ? Math.min(prepAt, Math.max(0.5, seconds - 1))
+      : prepAt
+
+    let prepTriggered = false
+    const checkPrep = (remainingSec: number) => {
+      if (!prepTriggered && onPrep && effectivePrepAt > 0 && remainingSec <= effectivePrepAt + 0.01) {
+        prepTriggered = true
+        onPrep()
+      }
+    }
+
     for (let i = seconds; i > 0; i--) {
       if (signal?.aborted) return cleanup()
       if (pauseCheck) await pauseCheck()
@@ -36,13 +48,14 @@ export class CountdownUI {
 
       this.playBeep(audioCtx, i === 1 ? 880 : 660)
 
-      if (i === prepTick && onPrep) {
-        onPrep()
-      }
+      checkPrep(i)
 
       await this.delay(500, pauseCheck)
       if (signal?.aborted) return cleanup()
       this.countdownEl.style.transform = 'scale(1)'
+
+      checkPrep(i - 0.5)
+
       await this.delay(500, pauseCheck)
       if (signal?.aborted) return cleanup()
     }
