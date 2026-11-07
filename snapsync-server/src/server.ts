@@ -35,6 +35,7 @@ const io = new SocketIOServer(server, {
     origin: config.allowedOrigins,
     credentials: true,
   },
+  maxHttpBufferSize: 1e7, // 10MB to accommodate photo session thumbnails and preview frames
   pingInterval: 10000,
   pingTimeout: 5000,
 })
@@ -490,8 +491,8 @@ io.on('connection', (socket) => {
       }
     })
 
-    socket.on('disconnect', () => {
-      logger.info(`Booth disconnected: ${socket.id} (event=${eventId})`)
+    socket.on('disconnect', (reason) => {
+      logger.info(`Booth disconnected: ${socket.id} (event=${eventId}), reason: ${reason}`)
       boothSockets.get(eventId)?.delete(socket.id)
       if (boothSockets.get(eventId)?.size === 0) {
         boothSockets.delete(eventId)
