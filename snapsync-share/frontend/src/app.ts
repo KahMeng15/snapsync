@@ -8,6 +8,7 @@ interface SessionPhoto {
   frameId?: string
   frameName?: string
   downloadUrl?: string
+  isOriginal?: boolean
 }
 
 interface SessionData {
@@ -98,19 +99,16 @@ function render(token: string) {
     }
   }
 
-  const groups: Record<string, SessionPhoto[]> = {};
-  for (const p of sessionData!.photos) {
-    const fid = p.frameId || 'unframed';
-    if (!groups[fid]) groups[fid] = [];
-    groups[fid].push(p);
+  if (heroInterval) {
+    window.clearInterval(heroInterval);
+    heroInterval = null;
   }
-  for (const fid in groups) {
-    if (groups[fid].length >= 2) {
-      animationPhotos = groups[fid];
-      break;
-    }
-  }
-  if (animationPhotos.length < 2) animationPhotos = sessionData!.photos;
+  heroIndex = 0;
+
+  // Rotate through original photos only (no framed images)
+  animationPhotos = sessionData!.photos.filter(
+    (p) => p.isOriginal === true || (!p.frameId && p.frameName === 'Original Photos') || p.frameId === 'unframed'
+  );
 
   if (animationPhotos.length >= 2) {
     $('hero-preview').classList.remove('hidden');
@@ -119,6 +117,8 @@ function render(token: string) {
       heroIndex = (heroIndex + 1) % animationPhotos.length;
       updateHero();
     }, 500);
+  } else {
+    $('hero-preview').classList.add('hidden');
   }
 
   const grid = $('photo-grid');

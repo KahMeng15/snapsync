@@ -4,6 +4,7 @@ WORKDIR /app
 RUN apk add --no-cache curl python3 make g++
 COPY shared ./shared
 COPY snapsync-share ./snapsync-share
+COPY docs ./docs
 
 WORKDIR /app/shared
 RUN npm ci
@@ -28,6 +29,7 @@ COPY --from=builder /app/shared ./shared
 COPY --from=builder /app/snapsync-share/package*.json ./snapsync-share/
 # Copy pruned share node_modules
 COPY --from=builder /app/snapsync-share/node_modules ./snapsync-share/node_modules
+COPY --from=builder /app/docs ./docs
 
 WORKDIR /app/snapsync-share
 

@@ -160,6 +160,7 @@ router.get('/:token', async (req: Request, res: Response) => {
             width: matchingFrame?.config?.canvasWidth || 0,
             height: matchingFrame?.config?.canvasHeight || 0,
             timestamp: stat.birthtime.toISOString(),
+            isOriginal: false,
           }
         })
       )
@@ -201,7 +202,8 @@ router.get('/:token', async (req: Request, res: Response) => {
             height: sessionDim.height,
             timestamp: stat.birthtime.toISOString(),
             frameId: 'unframed',
-            frameName: 'Original Photos'
+            frameName: 'Original Photos',
+            isOriginal: true,
           }
         })
       )

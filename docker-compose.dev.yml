@@ -55,6 +55,7 @@ services:
       STORAGE_ROOT: /app
     volumes:
       - ./snapsync-share:/app
+      - ./docs:/docs:ro
       - ./snapsync-server/storage:/app/storage
 
       - ./shared:/shared

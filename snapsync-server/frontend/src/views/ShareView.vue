@@ -129,6 +129,7 @@ interface SessionPhoto {
   size: number
   frameId?: string
   frameName?: string
+  isOriginal?: boolean
 }
 
 interface SessionData {
@@ -205,18 +206,9 @@ watch(selectedPhotoIndex, (idx) => {
 
 const animationPhotos = computed(() => {
   if (!session.value || !session.value.photos) return []
-  const groups: Record<string, SessionPhoto[]> = {}
-  for (const photo of session.value.photos) {
-    const fid = photo.frameId || 'unframed'
-    if (!groups[fid]) groups[fid] = []
-    groups[fid].push(photo)
-  }
-  for (const fid in groups) {
-    if (groups[fid].length >= 2) {
-      return groups[fid]
-    }
-  }
-  return session.value.photos
+  return session.value.photos.filter(
+    (photo) => photo.isOriginal === true || (!photo.frameId && photo.frameName === 'Original Photos') || photo.frameId === 'unframed'
+  )
 })
 
 const expiryText = computed(() => {
