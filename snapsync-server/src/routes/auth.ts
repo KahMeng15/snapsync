@@ -82,13 +82,13 @@ router.post('/login', checkLoginLockout, async (req: Request, res: Response) => 
     const accessToken = jwt.sign(
       tokenPayload,
       config.jwt.secret,
-      { expiresIn: '15m' }
+      { expiresIn: config.jwt.accessExpiry as any }
     )
 
     const refreshToken = jwt.sign(
       tokenPayload,
       config.jwt.refreshSecret,
-      { expiresIn: '7d' }
+      { expiresIn: config.jwt.refreshExpiry as any }
     )
 
     res.cookie('accessToken', accessToken, {
@@ -97,7 +97,7 @@ router.post('/login', checkLoginLockout, async (req: Request, res: Response) => 
       sameSite: config.cookie.sameSite,
       domain: config.cookie.domain,
       path: config.cookie.path,
-      maxAge: 15 * 60 * 1000,
+      maxAge: config.jwt.accessExpiryMs,
     })
 
     res.cookie('refreshToken', refreshToken, {
@@ -106,7 +106,7 @@ router.post('/login', checkLoginLockout, async (req: Request, res: Response) => 
       sameSite: config.cookie.sameSite,
       domain: config.cookie.domain,
       path: config.cookie.path,
-      maxAge: 7 * 24 * 60 * 60 * 1000,
+      maxAge: config.jwt.refreshExpiryMs,
     })
 
     logger.info(`${tokenPayload.role} logged in: ${tokenPayload.email}`)
@@ -155,11 +155,11 @@ router.post('/operator-login', checkLoginLockout, async (req: Request, res: Resp
     const sessionId = uuidv4()
     const tokenPayload = { userId: operator.id, email: `Operator: ${operator.name}`, role: 'operator', eventIdScope: operator.event_id, sessionId }
 
-    const accessToken = jwt.sign(tokenPayload, config.jwt.secret, { expiresIn: '15m' })
-    const refreshToken = jwt.sign(tokenPayload, config.jwt.refreshSecret, { expiresIn: '7d' })
+    const accessToken = jwt.sign(tokenPayload, config.jwt.secret, { expiresIn: config.jwt.accessExpiry as any })
+    const refreshToken = jwt.sign(tokenPayload, config.jwt.refreshSecret, { expiresIn: config.jwt.refreshExpiry as any })
 
-    res.cookie('accessToken', accessToken, { httpOnly: true, secure: config.cookie.secure, sameSite: config.cookie.sameSite, domain: config.cookie.domain, path: config.cookie.path, maxAge: 15 * 60 * 1000 })
-    res.cookie('refreshToken', refreshToken, { httpOnly: true, secure: config.cookie.secure, sameSite: config.cookie.sameSite, domain: config.cookie.domain, path: config.cookie.path, maxAge: 7 * 24 * 60 * 60 * 1000 })
+    res.cookie('accessToken', accessToken, { httpOnly: true, secure: config.cookie.secure, sameSite: config.cookie.sameSite, domain: config.cookie.domain, path: config.cookie.path, maxAge: config.jwt.accessExpiryMs })
+    res.cookie('refreshToken', refreshToken, { httpOnly: true, secure: config.cookie.secure, sameSite: config.cookie.sameSite, domain: config.cookie.domain, path: config.cookie.path, maxAge: config.jwt.refreshExpiryMs })
 
     logger.info(`Operator logged in: ${operator.name} for event ${operator.event_id}`)
     const ip = req.ip || req.socket.remoteAddress || 'unknown'
@@ -179,10 +179,19 @@ router.post('/refresh', (req: Request, res: Response) => {
 
     const decoded = jwt.verify(token, config.jwt.refreshSecret) as any
 
+    const tokenPayload: any = {
+      userId: decoded.userId,
+      email: decoded.email,
+      role: decoded.role,
+      sessionId: decoded.sessionId,
+    }
+    if (decoded.eventIdScope) tokenPayload.eventIdScope = decoded.eventIdScope
+    if (decoded.isSuperAdmin !== undefined) tokenPayload.isSuperAdmin = decoded.isSuperAdmin
+
     const newAccessToken = jwt.sign(
-      { userId: decoded.userId, email: decoded.email, role: decoded.role, sessionId: decoded.sessionId },
+      tokenPayload,
       config.jwt.secret,
-      { expiresIn: '15m' }
+      { expiresIn: config.jwt.accessExpiry as any }
     )
 
     res.cookie('accessToken', newAccessToken, {
@@ -191,7 +200,7 @@ router.post('/refresh', (req: Request, res: Response) => {
       sameSite: config.cookie.sameSite,
       domain: config.cookie.domain,
       path: config.cookie.path,
-      maxAge: 15 * 60 * 1000,
+      maxAge: config.jwt.accessExpiryMs,
     })
 
     res.json({ success: true, accessToken: newAccessToken })

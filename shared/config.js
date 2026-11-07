@@ -4,9 +4,31 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.config = exports.projectRoot = void 0;
+exports.parseDurationMs = parseDurationMs;
 const path_1 = __importDefault(require("path"));
 const projectRoot = process.env.STORAGE_ROOT || path_1.default.resolve(process.cwd());
 exports.projectRoot = projectRoot;
+function parseDurationMs(duration, fallbackMs) {
+    if (typeof duration === 'number')
+        return duration;
+    if (!duration || typeof duration !== 'string')
+        return fallbackMs;
+    const match = duration.trim().match(/^(\d+)\s*(ms|s|m|h|d|w|y)?$/i);
+    if (!match)
+        return fallbackMs;
+    const val = parseInt(match[1], 10);
+    const unit = (match[2] || 'ms').toLowerCase();
+    switch (unit) {
+        case 'ms': return val;
+        case 's': return val * 1000;
+        case 'm': return val * 60 * 1000;
+        case 'h': return val * 60 * 60 * 1000;
+        case 'd': return val * 24 * 60 * 60 * 1000;
+        case 'w': return val * 7 * 24 * 60 * 60 * 1000;
+        case 'y': return val * 365 * 24 * 60 * 60 * 1000;
+        default: return fallbackMs;
+    }
+}
 exports.config = {
     port: parseInt(process.env.PORT || '3000', 10),
     nodeEnv: process.env.NODE_ENV || 'development',
@@ -14,8 +36,14 @@ exports.config = {
     jwt: {
         secret: process.env.JWT_SECRET || 'dev-secret',
         refreshSecret: process.env.REFRESH_TOKEN_SECRET || 'dev-refresh',
-        accessExpiry: '15m',
-        refreshExpiry: '7d',
+        accessExpiry: process.env.JWT_ACCESS_EXPIRY || '24h',
+        refreshExpiry: process.env.JWT_REFRESH_EXPIRY || '7d',
+        get accessExpiryMs() {
+            return parseDurationMs(this.accessExpiry, 24 * 60 * 60 * 1000);
+        },
+        get refreshExpiryMs() {
+            return parseDurationMs(this.refreshExpiry, 7 * 24 * 60 * 60 * 1000);
+        },
     },
     cookie: {
         domain: process.env.COOKIE_DOMAIN || undefined,

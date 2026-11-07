@@ -37,7 +37,9 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       const { data } = await axios.get('/api/auth/me')
       user.value = data.user
-      await refreshToken()
+      if (!accessToken.value) {
+        await refreshToken()
+      }
       return true
     } catch {
       user.value = null

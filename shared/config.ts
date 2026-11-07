@@ -5,6 +5,28 @@ const projectRoot = process.env.STORAGE_ROOT || path.resolve(process.cwd())
 
 export { projectRoot }
 
+export function parseDurationMs(duration: string | number | undefined, fallbackMs: number): number {
+  if (typeof duration === 'number') return duration
+  if (!duration || typeof duration !== 'string') return fallbackMs
+
+  const match = duration.trim().match(/^(\d+)\s*(ms|s|m|h|d|w|y)?$/i)
+  if (!match) return fallbackMs
+
+  const val = parseInt(match[1], 10)
+  const unit = (match[2] || 'ms').toLowerCase()
+
+  switch (unit) {
+    case 'ms': return val
+    case 's': return val * 1000
+    case 'm': return val * 60 * 1000
+    case 'h': return val * 60 * 60 * 1000
+    case 'd': return val * 24 * 60 * 60 * 1000
+    case 'w': return val * 7 * 24 * 60 * 60 * 1000
+    case 'y': return val * 365 * 24 * 60 * 60 * 1000
+    default: return fallbackMs
+  }
+}
+
 export const config = {
   port: parseInt(process.env.PORT || '3000', 10),
   nodeEnv: process.env.NODE_ENV || 'development',
@@ -13,8 +35,14 @@ export const config = {
   jwt: {
     secret: process.env.JWT_SECRET || 'dev-secret',
     refreshSecret: process.env.REFRESH_TOKEN_SECRET || 'dev-refresh',
-    accessExpiry: '15m',
-    refreshExpiry: '7d',
+    accessExpiry: process.env.JWT_ACCESS_EXPIRY || '24h',
+    refreshExpiry: process.env.JWT_REFRESH_EXPIRY || '7d',
+    get accessExpiryMs(): number {
+      return parseDurationMs(this.accessExpiry, 24 * 60 * 60 * 1000)
+    },
+    get refreshExpiryMs(): number {
+      return parseDurationMs(this.refreshExpiry, 7 * 24 * 60 * 60 * 1000)
+    },
   },
 
   cookie: {

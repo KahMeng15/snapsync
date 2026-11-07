@@ -1,5 +1,6 @@
 declare const projectRoot: string;
 export { projectRoot };
+export declare function parseDurationMs(duration: string | number | undefined, fallbackMs: number): number;
 export declare const config: {
     port: number;
     nodeEnv: string;
@@ -9,6 +10,8 @@ export declare const config: {
         refreshSecret: string;
         accessExpiry: string;
         refreshExpiry: string;
+        readonly accessExpiryMs: number;
+        readonly refreshExpiryMs: number;
     };
     cookie: {
         domain: string | undefined;

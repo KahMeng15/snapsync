@@ -15,6 +15,8 @@ services:
       PORT: 3000
       JWT_SECRET: dev-secret
       REFRESH_TOKEN_SECRET: dev-refresh-secret
+      JWT_ACCESS_EXPIRY: 24h
+      JWT_REFRESH_EXPIRY: 7d
       OPERATOR_EMAIL: operator@snapsync.local
       OPERATOR_PASSWORD: admin123
       ALLOWED_ORIGINS: "*"

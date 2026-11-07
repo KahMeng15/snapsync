@@ -14,7 +14,7 @@ View and download your photos here:
 
 ---
 Photos taken with snapsync, an app project by [kahmeng](https://kahmeng15.github.io).
-Learn more about this app at [kmsnapsync.vercel.app](https://kmsnapsync.vercel.app).
+Learn more about this app at [kmsnapsync.vercel.app](https://kmsnapsync.vercel.app/).
 Have some feedback? [Submit it here](https://kahmeng15.github.io/feedback/).`
 
 export function isSmtpConfigured(): boolean {
