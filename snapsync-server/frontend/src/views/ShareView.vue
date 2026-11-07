@@ -1,7 +1,7 @@
 <template>
   <div class="share-page">
     <div v-if="loading" class="share-content skeleton-loader">
-      <header class="share-header skeleton-pulse" style="height: 60px; max-width: 300px; margin: 0 auto 2rem; border-radius: var(--radius-md);"></header>
+      <header class="share-header skeleton-pulse" style="height: 60px; max-width: 300px; margin: 1.5rem auto 2.5rem; border-radius: var(--radius-md);"></header>
       <div class="photo-grid">
         <div v-for="i in 3" :key="i" class="photo-card skeleton-pulse" style="aspect-ratio: 2/3;"></div>
       </div>
@@ -45,7 +45,22 @@
               <div v-for="{ photo, index } in framedPhotos" :key="photo.id" class="photo-card" :class="{ 'is-single': framedPhotos.length === 1 }">
                 <div class="card-img-wrap">
                   <div class="blur-bg" :style="{ backgroundImage: `url(${baseUrl + (photo.thumbnail || photo.url)})` }"></div>
-                  <img :src="baseUrl + (photo.thumbnail || photo.url)" :alt="'Photo'" loading="lazy" class="share-img" @load="$event.target.classList.add('loaded')" @click="openPhoto(index)" />
+                  <img
+                    v-if="photo.thumbnail"
+                    :src="baseUrl + photo.thumbnail"
+                    class="card-thumb"
+                    :class="{ 'thumb-hidden': loadedCards[photo.id] }"
+                    aria-hidden="true"
+                  />
+                  <img
+                    :src="baseUrl + photo.url"
+                    :alt="'Photo'"
+                    loading="lazy"
+                    class="share-img"
+                    :class="{ 'loaded': loadedCards[photo.id] }"
+                    @load="onCardImgLoad(photo.id)"
+                    @click="openPhoto(index)"
+                  />
                 </div>
                 <a :href="getDownloadUrl(photo)" class="download-btn" download>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -63,7 +78,22 @@
               <div v-for="{ photo, index } in originalPhotos" :key="photo.id" class="photo-card" :class="{ 'is-single': originalPhotos.length === 1 }">
                 <div class="card-img-wrap">
                   <div class="blur-bg" :style="{ backgroundImage: `url(${baseUrl + (photo.thumbnail || photo.url)})` }"></div>
-                  <img :src="baseUrl + (photo.thumbnail || photo.url)" :alt="'Photo'" loading="lazy" class="share-img" @load="$event.target.classList.add('loaded')" @click="openPhoto(index)" />
+                  <img
+                    v-if="photo.thumbnail"
+                    :src="baseUrl + photo.thumbnail"
+                    class="card-thumb"
+                    :class="{ 'thumb-hidden': loadedCards[photo.id] }"
+                    aria-hidden="true"
+                  />
+                  <img
+                    :src="baseUrl + photo.url"
+                    :alt="'Photo'"
+                    loading="lazy"
+                    class="share-img"
+                    :class="{ 'loaded': loadedCards[photo.id] }"
+                    @load="onCardImgLoad(photo.id)"
+                    @click="openPhoto(index)"
+                  />
                 </div>
                 <a :href="getDownloadUrl(photo)" class="download-btn" download>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -179,6 +209,12 @@ const session = ref<SessionData | null>(null)
 const selectedPhotoIndex = ref<number | null>(null)
 const heroIndex = ref(0)
 let heroInterval: number | null = null
+
+const loadedCards = ref<Record<string, boolean>>({})
+
+function onCardImgLoad(photoId: string) {
+  loadedCards.value[photoId] = true
+}
 
 const showControls = ref(true)
 let controlsTimeout: number | null = null
@@ -423,7 +459,8 @@ async function downloadAll() {
 
 .share-header {
   text-align: center;
-  padding: 2rem 1rem;
+  padding: 3.5rem 1.5rem 1.5rem;
+  margin-bottom: 2rem;
 }
 
 .share-header h1 {
@@ -437,13 +474,13 @@ async function downloadAll() {
   color: var(--color-text-muted);
   font-size: var(--text-sm);
   margin: 0;
-  margin-top: 0.25rem;
+  margin-top: 0.35rem;
 }
 
 .hero-preview {
   width: 100%;
   max-width: 1000px;
-  margin: 0 auto;
+  margin: 0 auto 2.5rem;
   padding: 0 2rem;
   display: flex;
   align-items: center;
@@ -581,7 +618,8 @@ async function downloadAll() {
 
 .single-photo-mode .share-header {
   flex-shrink: 0;
-  padding: 1.25rem 1rem 0.75rem;
+  padding: 2.5rem 1.5rem 1.25rem;
+  margin-bottom: 1.25rem;
 }
 
 .single-photo-mode .share-header h1 {
@@ -590,7 +628,7 @@ async function downloadAll() {
 
 .single-photo-mode .subtitle {
   font-size: var(--text-xs);
-  margin-top: 0.15rem;
+  margin-top: 0.25rem;
 }
 
 .single-photo-mode .photos-container.has-single-photo {
@@ -601,7 +639,7 @@ async function downloadAll() {
   width: 100%;
   max-width: 540px;
   margin: 0 auto;
-  padding: 0 1.25rem;
+  padding: 0 1.25rem 1.5rem;
   gap: 0;
 }
 
@@ -766,6 +804,24 @@ async function downloadAll() {
   z-index: 1;
 }
 
+.card-thumb {
+  position: absolute;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+  max-height: 100% !important;
+  object-fit: contain;
+  pointer-events: none;
+  filter: none !important;
+  transform: none !important;
+  transition: opacity 0.3s ease;
+  z-index: 0;
+}
+
+.card-thumb.thumb-hidden {
+  opacity: 0;
+}
+
 .download-btn {
   display: flex;
   align-items: center;
@@ -867,9 +923,10 @@ async function downloadAll() {
   .share-header {
     order: 1;
     margin-top: 0;
+    margin-bottom: 1.5rem;
     position: relative;
     z-index: 10;
-    padding: 1.5rem 1rem 0.5rem;
+    padding: calc(2.5rem + env(safe-area-inset-top, 0px)) 1.25rem 1rem;
     border-bottom: none;
   }
   .has-hero .share-header {
@@ -924,7 +981,7 @@ async function downloadAll() {
     gap: 1rem;
   }
   .single-photo-mode .photos-container.has-single-photo {
-    padding: 0 1rem !important;
+    padding: 0 1rem 1.5rem !important;
   }
   .photo-grid.single-item {
     padding: 0 !important;
@@ -968,6 +1025,7 @@ async function downloadAll() {
   height: 100%;
   object-fit: contain;
   border-radius: var(--radius-md);
+  pointer-events: none;
   transition: opacity 0.3s ease;
 }
 

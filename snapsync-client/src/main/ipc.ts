@@ -152,8 +152,8 @@ function createThrottledStream(buffer: Buffer, kbps: number): Readable {
 // Runs async/fire-and-forget after enqueueing so it never blocks the capture flow.
 // ---------------------------------------------------------------------------
 
-const THUMB_WIDTH = 420  // px — wide enough for 2-col detail grid, tiny for cards
-const THUMB_QUALITY = 72 // JPEG quality 0–100
+const THUMB_WIDTH = 1920  // px — max width 1920px
+const THUMB_QUALITY = 80 // JPEG quality 0–100
 
 async function generateGalleryThumbnails(
   sessionId: string,
@@ -183,7 +183,10 @@ async function generateGalleryThumbnails(
         const ni = nativeImage.createFromPath(srcPath)
         if (ni.isEmpty()) continue
 
-        const resized = ni.resize({ width: THUMB_WIDTH, quality: 'good' })
+        const size = ni.getSize()
+        const resized = size.width > THUMB_WIDTH
+          ? ni.resize({ width: THUMB_WIDTH, quality: 'good' })
+          : ni
         const buffer = resized.toJPEG(THUMB_QUALITY)
         await fs.promises.writeFile(thumbPath, buffer)
         thumbPaths.push(thumbPath)

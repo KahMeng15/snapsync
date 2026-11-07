@@ -1872,17 +1872,18 @@ export class BoothApp {
           img.onerror = reject
         })
         const canvas = document.createElement('canvas')
-        const maxW = 400
-        const maxH = 300
+        const maxW = 1920
         let w = img.width
         let h = img.height
-        if (w > maxW) { h = Math.round((h * maxW) / w); w = maxW }
-        if (h > maxH) { w = Math.round((w * maxH) / h); h = maxH }
+        if (w > maxW) {
+          h = Math.round((h * maxW) / w)
+          w = maxW
+        }
         canvas.width = w
         canvas.height = h
         const ctx = canvas.getContext('2d')
         ctx?.drawImage(img, 0, 0, w, h)
-        thumbs.push(canvas.toDataURL('image/jpeg', 0.5))
+        thumbs.push(canvas.toDataURL('image/jpeg', 0.8))
       } catch (e) {
         thumbs.push('') // fallback on error
       }

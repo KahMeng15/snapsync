@@ -150,8 +150,9 @@ export async function generateThumbnail(
     const outputPath = path.join(dir, outputName)
 
     await sharp(inputPath)
-      .resize(config.imageProcessing.thumbnailSize, config.imageProcessing.thumbnailSize, {
-        fit: 'inside',
+      .resize({
+        width: config.imageProcessing.thumbnailSize,
+        withoutEnlargement: true,
       })
       .webp({ quality: config.imageProcessing.thumbnailQuality, effort: 5 })
       .toFile(outputPath)
@@ -344,7 +345,7 @@ export async function applyFrame(
 
   await pipeline.clone().webp({ quality: config.imageProcessing.webpQuality, effort: 4 }).toFile(webpPath)
   await pipeline.clone().flatten({ background: { r: 255, g: 255, b: 255 } }).jpeg({ quality: jpegQuality }).toFile(jpegPath)
-  await pipeline.clone().resize(config.imageProcessing.thumbnailSize, config.imageProcessing.thumbnailSize, { fit: 'inside' }).webp({ quality: config.imageProcessing.thumbnailQuality, effort: 5 }).toFile(thumbPath)
+  await pipeline.clone().resize({ width: config.imageProcessing.thumbnailSize, withoutEnlargement: true }).webp({ quality: config.imageProcessing.thumbnailQuality, effort: 5 }).toFile(thumbPath)
 
   const webpStats = await fs.stat(webpPath)
   const jpegStats = await fs.stat(jpegPath)

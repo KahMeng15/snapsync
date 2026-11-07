@@ -154,7 +154,8 @@ body {
 
 .share-header {
   text-align: center;
-  padding: 2rem 1rem;
+  padding: 3.5rem 1.5rem 1.5rem;
+  margin-bottom: 2rem;
 }
 
 .share-header h1 {
@@ -168,13 +169,13 @@ body {
   color: var(--color-text-muted);
   font-size: var(--text-sm);
   margin: 0;
-  margin-top: 0.25rem;
+  margin-top: 0.35rem;
 }
 
 .hero-preview {
   width: 100%;
   max-width: 1000px;
-  margin: 0 auto;
+  margin: 0 auto 2.5rem;
   padding: 0 2rem;
   display: flex;
   align-items: center;
@@ -313,7 +314,8 @@ body.single-photo-mode,
 
 .single-photo-mode .share-header {
   flex-shrink: 0;
-  padding: 1.25rem 1rem 0.75rem;
+  padding: 2.5rem 1.5rem 1.25rem;
+  margin-bottom: 1.25rem;
 }
 
 .single-photo-mode .share-header h1 {
@@ -322,7 +324,7 @@ body.single-photo-mode,
 
 .single-photo-mode .subtitle {
   font-size: var(--text-xs);
-  margin-top: 0.15rem;
+  margin-top: 0.25rem;
 }
 
 .single-photo-mode .photos-container.has-single-photo {
@@ -333,7 +335,7 @@ body.single-photo-mode,
   width: 100%;
   max-width: 540px;
   margin: 0 auto;
-  padding: 0 1.25rem;
+  padding: 0 1.25rem 1.5rem;
   gap: 0;
 }
 
@@ -498,6 +500,24 @@ body.single-photo-mode,
   z-index: 1;
 }
 
+.card-thumb {
+  position: absolute;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+  max-height: 100% !important;
+  object-fit: contain;
+  pointer-events: none;
+  filter: none !important;
+  transform: none !important;
+  transition: opacity 0.3s ease;
+  z-index: 0;
+}
+
+.card-thumb.thumb-hidden {
+  opacity: 0;
+}
+
 .download-btn {
   display: flex;
   align-items: center;
@@ -598,9 +618,10 @@ body.single-photo-mode,
   .share-header {
     order: 1;
     margin-top: 0;
+    margin-bottom: 1.5rem;
     position: relative;
     z-index: 20;
-    padding: 1.5rem 1rem 0.5rem;
+    padding: calc(2.5rem + env(safe-area-inset-top, 0px)) 1.25rem 1rem;
     border-bottom: none;
   }
   .has-hero .share-header,
@@ -690,6 +711,7 @@ body.single-photo-mode,
   height: 100%;
   object-fit: contain;
   border-radius: var(--radius-md);
+  pointer-events: none;
   transition: opacity 0.3s ease;
 }
 
@@ -804,7 +826,7 @@ body {
     flex: 0 0 auto !important;
   }
   .single-photo-mode .photos-container.has-single-photo {
-    padding: 0 1rem !important;
+    padding: 0 1rem 1.5rem !important;
   }
   .photo-grid.single-item {
     padding: 0 !important;
@@ -820,7 +842,7 @@ body {
 <body class="share-themed">
   <div class="share-page" id="share-page">
     <div id="loader" class="share-content skeleton-loader">
-      <header class="share-header skeleton-pulse" style="height: 60px; max-width: 300px; margin: 0 auto 2rem;"></header>
+      <header class="share-header skeleton-pulse" style="height: 60px; max-width: 300px; margin: 1.5rem auto 2.5rem;"></header>
       <div class="photo-grid">
         <div class="photo-card skeleton-pulse" style="aspect-ratio: 2/3;"></div>
         <div class="photo-card skeleton-pulse" style="aspect-ratio: 2/3;"></div>

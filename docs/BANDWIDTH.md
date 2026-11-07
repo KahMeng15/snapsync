@@ -10,7 +10,7 @@
 ### Server-Side
 - gzip + Brotli compression on all JSON responses
 - HTTP cache headers: 1 year for immutable assets, 1 hour for latest
-- Thumbnail lazy loading: 400px thumbnails first, click for full
+- Thumbnail lazy loading: 1920px max width thumbnails first, click for full
 - WebSocket binary frames with delta compression
 
 ### Measurements

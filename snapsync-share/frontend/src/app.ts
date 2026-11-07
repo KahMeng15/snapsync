@@ -168,13 +168,31 @@ function render(token: string) {
     const blur = document.createElement('div');
     blur.className = 'blur-bg';
     blur.style.backgroundImage = `url(${thumbUrl})`;
+    imgWrap.appendChild(blur);
+
+    if (photo.thumbnail) {
+      const thumb = document.createElement('img');
+      thumb.src = thumbUrl;
+      thumb.className = 'card-thumb';
+      thumb.setAttribute('aria-hidden', 'true');
+      imgWrap.appendChild(thumb);
+    }
     
     const img = document.createElement('img');
-    img.src = thumbUrl;
+    img.src = photo.url;
+    img.className = 'share-img';
     img.loading = 'lazy';
-    img.onload = () => img.classList.add('loaded');
+    img.onload = () => {
+      img.classList.add('loaded');
+      const thumb = imgWrap.querySelector('.card-thumb');
+      if (thumb) thumb.classList.add('thumb-hidden');
+    };
+    if (img.complete && img.naturalWidth > 0) {
+      img.classList.add('loaded');
+      const thumb = imgWrap.querySelector('.card-thumb');
+      if (thumb) thumb.classList.add('thumb-hidden');
+    }
 
-    imgWrap.appendChild(blur);
     imgWrap.appendChild(img);
     card.appendChild(imgWrap);
 
@@ -271,6 +289,10 @@ function updateLightbox() {
     thumb.classList.add('thumb-hidden');
   };
   img.src = p.url;
+  if (img.complete && img.naturalWidth > 0) {
+    img.classList.add('lb-loaded');
+    thumb.classList.add('thumb-hidden');
+  }
 
   $('lb-prev').style.display = currentPhotoIdx > 0 ? 'block' : 'none';
   $('lb-next').style.display = currentPhotoIdx < sessionData!.photos.length - 1 ? 'block' : 'none';
