@@ -109,14 +109,19 @@
           <span v-if="pendingAction === 'pause'" class="app-spinner inline-spinner"></span>
           {{ pendingAction === 'pause' ? 'Pausing...' : 'Pause Booth' }}
         </button>
-        <button v-if="boothState?.shareUrl" class="app-btn full-width-btn btn-show-qr-active" @click="showLocalQR">
+        <button
+          v-if="currentState === 'capturing' || boothState?.shareUrl"
+          class="app-btn full-width-btn btn-show-qr-active"
+          @click="showLocalQR"
+          :disabled="!boothState?.shareUrl"
+        >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <rect x="3" y="3" width="7" height="7"></rect>
             <rect x="14" y="3" width="7" height="7"></rect>
             <rect x="14" y="14" width="7" height="7"></rect>
             <rect x="3" y="14" width="7" height="7"></rect>
           </svg>
-          Show QR Code {{ currentState === 'capturing' ? '(Active)' : '' }}
+          {{ boothState?.shareUrl ? (currentState === 'capturing' ? 'Show QR Code (Active)' : 'Show QR Code') : 'Generating QR Code...' }}
         </button>
       </div>
     </section>
@@ -342,6 +347,15 @@ async function showLocalQR() {
     margin: 2,
   })
 }
+
+watch(() => props.boothState?.shareUrl, async (newUrl) => {
+  if (newUrl && showRemoteQR.value) {
+    remoteQrDataUrl.value = await QRCode.toDataURL(newUrl, {
+      width: 500,
+      margin: 2,
+    })
+  }
+})
 
 function toggleQR() {
   qrShowing.value = !qrShowing.value

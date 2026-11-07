@@ -44,6 +44,10 @@ export function connectBoothSocket(serverUrl: string, otp: string) {
     console.log('[booth] Received command via WebSocket:', cmd)
     document.dispatchEvent(new CustomEvent('booth-ws-command', { detail: cmd }))
   })
+  boothSocket.on('share-id-ready', (data: any) => {
+    console.log('[booth] Received share-id-ready via WebSocket:', data)
+    document.dispatchEvent(new CustomEvent('booth-ws-share-id', { detail: data }))
+  })
 }
 
 export function disconnectBoothSocket() {

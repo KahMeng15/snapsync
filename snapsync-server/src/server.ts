@@ -22,7 +22,7 @@ import { authMiddleware } from './middleware/authMiddleware'
 import { errorHandler } from './middleware/errorHandler'
 import { requestLogger } from './middleware/requestLogger'
 import { csrfProtection, setCsrfToken } from './middleware/csrfMiddleware'
-import { config, projectRoot, logger, getEventByOtp, getGlobalSettings } from '@snapsync/shared'
+import { config, projectRoot, logger, getEventByOtp, getGlobalSettings, reservePhotoSession } from '@snapsync/shared'
 
 const app = express()
 
@@ -139,6 +139,7 @@ const operatorSubscriptions = new Map<string, Set<string>>()
 // Caches for late-joining operators
 const boothStateCache = new Map<string, BoothStateFull>()
 const boothUploadCache = new Map<string, BoothStateFull['uploadProgress'] & { queue?: BoothStateFull['uploadQueue'] }>()
+const activeEventSessions = new Map<string, { sessionId: string; shareId: string; shareUrl: string }>()
 
 // Track preview stream viewers per event
 const previewViewers = new Map<string, Set<string>>()
@@ -231,8 +232,36 @@ io.on('connection', (socket) => {
       }
     })
 
-    socket.on('booth-capture', (data: { eventId: string }) => {
-      forwardToBooth(data.eventId, { type: 'capture' })
+    socket.on('booth-capture', (data: { eventId: string; sessionId?: string }) => {
+      const sessionId = data.sessionId || `session_${Date.now()}`
+      try {
+        const shareId = reservePhotoSession(sessionId, data.eventId)
+        const baseUrl = process.env.VITE_SHARE_BASE_URL || (process.env.SHARE_BASE_URL ? `${process.env.SHARE_BASE_URL.replace(/\/$/, '')}/share` : `http://localhost:3000/share`)
+        const shareUrl = `${baseUrl.replace(/\/$/, '')}/${shareId}`
+
+        activeEventSessions.set(data.eventId, { sessionId, shareId, shareUrl })
+
+        const cached = (boothStateCache.get(data.eventId) || { state: 'capturing' }) as any
+        cached.state = 'capturing'
+        cached.sessionId = sessionId
+        cached.shareId = shareId
+        cached.shareUrl = shareUrl
+        boothStateCache.set(data.eventId, cached)
+
+        const subs = operatorSubscriptions.get(data.eventId)
+        if (subs) {
+          for (const sid of subs) {
+            io.to(sid).emit('booth-state', { ...cached, eventId: data.eventId })
+          }
+        }
+
+        io.emit('new-media', { eventId: data.eventId, sessionId, shareId, shareUrl, inProgress: true })
+
+        forwardToBooth(data.eventId, { type: 'capture', sessionId, shareId, shareUrl })
+      } catch (err: any) {
+        logger.error('Error in booth-capture handler: ' + err.message)
+        forwardToBooth(data.eventId, { type: 'capture' })
+      }
     })
 
     socket.on('booth-start', (data: { eventId: string }) => {
@@ -354,12 +383,51 @@ io.on('connection', (socket) => {
       }
     })
 
-    socket.on('booth-state', (data: BoothStateFull) => {
-      boothStateCache.set(eventId, data)
+    socket.on('booth-state', (data: any) => {
+      if (!data) return
+
+      if (data.state === 'capturing') {
+        let active = activeEventSessions.get(eventId)
+        if (!active || (data.sessionId && active.sessionId !== data.sessionId)) {
+          const sessionId = data.sessionId || `session_${Date.now()}`
+          try {
+            const shareId = reservePhotoSession(sessionId, eventId)
+            const baseUrl = process.env.VITE_SHARE_BASE_URL || (process.env.SHARE_BASE_URL ? `${process.env.SHARE_BASE_URL.replace(/\/$/, '')}/share` : `http://localhost:3000/share`)
+            const shareUrl = `${baseUrl.replace(/\/$/, '')}/${shareId}`
+            active = { sessionId, shareId, shareUrl }
+            activeEventSessions.set(eventId, active)
+
+            socket.emit('share-id-ready', { sessionId, shareId, shareUrl })
+            io.emit('new-media', { eventId, sessionId, shareId, shareUrl, inProgress: true })
+          } catch (err: any) {
+            logger.error(`Error auto-reserving from booth-state: ${err.message}`)
+          }
+        }
+
+        if (active) {
+          data.sessionId = active.sessionId
+          data.shareId = active.shareId
+          data.shareUrl = active.shareUrl
+        }
+      } else if (data.state === 'preview' || data.state === 'retake-selection') {
+        const active = activeEventSessions.get(eventId)
+        if (active) {
+          if (!data.shareUrl) data.shareUrl = active.shareUrl
+          if (!data.sessionId) data.sessionId = active.sessionId
+          if (!data.shareId) data.shareId = active.shareId
+        }
+      } else if (data.state === 'idle' || data.state === 'live') {
+        activeEventSessions.delete(eventId)
+      }
+
+      const existing = boothStateCache.get(eventId) || {}
+      const merged = { ...existing, ...data, eventId }
+      boothStateCache.set(eventId, merged)
+
       const subs = operatorSubscriptions.get(eventId)
       if (subs) {
         for (const sid of subs) {
-          io.to(sid).emit('booth-state', { ...data, eventId })
+          io.to(sid).emit('booth-state', merged)
         }
       }
     })
@@ -521,4 +589,4 @@ function shutdown(signal: string) {
 process.on('SIGINT', () => shutdown('SIGINT'))
 process.on('SIGTERM', () => shutdown('SIGTERM'))
 
-export { app, server, io, boothSockets, operatorSubscriptions, disconnectBooth }
+export { app, server, io, boothSockets, operatorSubscriptions, disconnectBooth, activeEventSessions }

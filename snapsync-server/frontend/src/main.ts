@@ -3,6 +3,9 @@ import { createPinia } from 'pinia'
 import App from './App.vue'
 import { router } from './router'
 import axios from 'axios'
+import Vue3Toastify, { toast, type ToastContainerOptions } from 'vue3-toastify'
+import 'vue3-toastify/dist/index.css'
+import './styles/main.css'
 
 const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, '')
 axios.defaults.withCredentials = true
@@ -38,6 +41,12 @@ axios.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config
+
+    if (error.response?.status === 429) {
+      const msg = error.response.data?.error || 'Temporarily rate limited. Please wait a moment and try again.'
+      toast.error(msg, { toastId: 'rate-limit-blocked' })
+      return Promise.reject(error)
+    }
 
     if (!error.response || error.response.status !== 401 || !originalRequest) {
       return Promise.reject(error)
@@ -113,10 +122,6 @@ axios.interceptors.response.use(
     }
   }
 )
-
-import Vue3Toastify, { type ToastContainerOptions } from 'vue3-toastify';
-import 'vue3-toastify/dist/index.css';
-import './styles/main.css'
 
 const app = createApp(App)
 

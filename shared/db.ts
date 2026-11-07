@@ -141,12 +141,16 @@ try { db.exec(`ALTER TABLE global_settings ADD COLUMN organizer TEXT NOT NULL DE
 try { db.exec(`ALTER TABLE global_settings ADD COLUMN contact_info TEXT NOT NULL DEFAULT ''`) } catch (e: any) { if (!e.message.includes("duplicate column name")) throw e; }
 
 // Phase 2: Rate Limits & Bandwidth
-try { db.exec(`ALTER TABLE global_settings ADD COLUMN api_rate_limit_admin INTEGER NOT NULL DEFAULT 500`) } catch (e: any) { if (!e.message.includes("duplicate column name")) throw e; }
+try { db.exec(`ALTER TABLE global_settings ADD COLUMN api_rate_limit_admin INTEGER NOT NULL DEFAULT 2000`) } catch (e: any) { if (!e.message.includes("duplicate column name")) throw e; }
 try { db.exec(`ALTER TABLE global_settings ADD COLUMN api_rate_limit_share INTEGER NOT NULL DEFAULT 300`) } catch (e: any) { if (!e.message.includes("duplicate column name")) throw e; }
-try { db.exec(`ALTER TABLE global_settings ADD COLUMN bw_limit_admin INTEGER NOT NULL DEFAULT 1000`) } catch (e: any) { if (!e.message.includes("duplicate column name")) throw e; } // in MB/15m
+try { db.exec(`ALTER TABLE global_settings ADD COLUMN bw_limit_admin INTEGER NOT NULL DEFAULT 10000`) } catch (e: any) { if (!e.message.includes("duplicate column name")) throw e; } // in MB/15m
 try { db.exec(`ALTER TABLE global_settings ADD COLUMN bw_limit_share INTEGER NOT NULL DEFAULT 100`) } catch (e: any) { if (!e.message.includes("duplicate column name")) throw e; } // in MB/15m
 try { db.exec(`ALTER TABLE global_settings ADD COLUMN lockout_duration INTEGER NOT NULL DEFAULT 5`) } catch (e: any) { if (!e.message.includes("duplicate column name")) throw e; } // in minutes
 try { db.exec(`ALTER TABLE global_settings ADD COLUMN remote_preview_max_viewers INTEGER NOT NULL DEFAULT 3`) } catch (e: any) { if (!e.message.includes("duplicate column name")) throw e; }
+
+// Auto-upgrade legacy restrictive defaults for admin if still set to old phase-2 limits
+try { db.exec(`UPDATE global_settings SET api_rate_limit_admin = 2000 WHERE id = 1 AND api_rate_limit_admin <= 500`) } catch (e) {}
+try { db.exec(`UPDATE global_settings SET bw_limit_admin = 10000 WHERE id = 1 AND bw_limit_admin <= 1000`) } catch (e) {}
 
 try { db.exec(`ALTER TABLE camera_settings ADD COLUMN dslr_whitebalance_kelvin INTEGER NOT NULL DEFAULT 5200`) } catch (e: any) { if (!e.message.includes("duplicate column name")) throw e; }
 
@@ -718,9 +722,9 @@ export function getGlobalSettings() {
     dslrWhiteBalanceKelvin: row?.dslr_whitebalance_kelvin ?? 5200,
     organizer: row?.organizer ?? '',
     contactInfo: row?.contact_info ?? '',
-    apiRateLimitAdmin: row?.api_rate_limit_admin ?? 500,
+    apiRateLimitAdmin: row?.api_rate_limit_admin ? Math.max(row.api_rate_limit_admin, 2000) : 2000,
     apiRateLimitShare: row?.api_rate_limit_share ?? 300,
-    bwLimitAdmin: row?.bw_limit_admin ?? 1000,
+    bwLimitAdmin: row?.bw_limit_admin ? Math.max(row.bw_limit_admin, 10000) : 10000,
     bwLimitShare: row?.bw_limit_share ?? 100,
     lockoutDuration: row?.lockout_duration ?? 5,
     remotePreviewMaxViewers: row?.remote_preview_max_viewers ?? 3,

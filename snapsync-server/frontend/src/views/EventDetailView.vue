@@ -86,10 +86,9 @@
                 @load="$event.target.classList.add('loaded')"
               />
               <div v-else-if="session.inProgress" class="thumb-in-progress">
-                <div class="in-progress-badge">IN PROGRESS</div>
                 <div class="in-progress-content">
                   <span class="app-spinner inline-spinner" style="margin-right: 0;"></span>
-                  <span class="in-progress-text-sub">Waiting for upload...</span>
+                  <span class="in-progress-text-sub">In progress: waiting for upload...</span>
                 </div>
               </div>
               <div v-else class="thumb-img thumb-skeleton skeleton-pulse"></div>
@@ -102,7 +101,7 @@
             <div class="session-meta">
               <span class="session-time">{{ formatTime(session.createdAt) }}</span>
               <span class="session-count" :class="{ 'in-progress-status': session.inProgress }">
-                {{ session.inProgress ? 'Ready to Share (Uploading)' : `${session.photoCount} photo${session.photoCount !== 1 ? 's' : ''}` }}
+                {{ session.inProgress ? 'Uploading...' : `${session.photoCount} photo${session.photoCount !== 1 ? 's' : ''}` }}
               </span>
             </div>
           </div>
@@ -279,6 +278,7 @@ onMounted(async () => {
 
   socket.on('connect', () => {
     subscribe(eventId)
+    loadSessions()
   })
 
   socket.on('booth-connected', (data: any) => {
@@ -296,6 +296,25 @@ onMounted(async () => {
 
   socket.on('new-media', async (data: any) => {
     if (data.eventId === eventId) {
+      if (data.inProgress && data.sessionId) {
+        const existingIdx = photoSessions.value.findIndex(s => s.sessionId === data.sessionId)
+        if (existingIdx === -1) {
+          photoSessions.value.unshift({
+            sessionId: data.sessionId,
+            photoCount: 0,
+            firstPhoto: null,
+            photos: [],
+            timestamps: [new Date().toISOString()],
+            createdAt: new Date().toISOString(),
+            archived: false,
+            share_id: data.shareId || null,
+            photoWidth: 0,
+            photoHeight: 0,
+            inProgress: true,
+            uploadStatus: 'reserved',
+          })
+        }
+      }
       await loadSessions()
     }
   })
@@ -336,7 +355,12 @@ function resolveBoothError(action: string) {
   activeBoothError.value = null
 }
 
-const pollInterval = setInterval(() => { loadSessions() }, 5000)
+// Only poll as a fallback if the real-time WebSocket connection is offline
+const pollInterval = setInterval(() => {
+  if (!ws.value?.connected) {
+    loadSessions()
+  }
+}, 10000)
 
 const connPollInterval = setInterval(() => {
   if (!boothConnected.value && ws.value?.connected) {
@@ -353,11 +377,15 @@ onUnmounted(() => {
   unsubscribe(eventId)
 })
 
+let isLoadingSessions = false
 async function loadSessions() {
+  if (isLoadingSessions) return
+  isLoadingSessions = true
   const eventId = route.params.id as string
   try {
     const { data } = await axios.get(`/api/admin/events/${eventId}/photos`, {
-      params: { includeArchived: showArchive.value }
+      params: { includeArchived: showArchive.value, _t: Date.now() },
+      headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
     })
     if (showArchive.value) {
       photoSessions.value = data.sessions.filter((s: any) => s.archived)
@@ -366,6 +394,8 @@ async function loadSessions() {
     }
   } catch (err) {
     console.error('Failed to load sessions', err)
+  } finally {
+    isLoadingSessions = false
   }
 }
 
@@ -539,49 +569,7 @@ function formatTime(ts: string) {
   color: var(--color-text);
 }
 
-.dashboard-grid-full {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-  padding: 1.5rem;
-  max-width: 1400px;
-  margin: 0 auto;
-  width: 100%;
-}
-.remote-sidebar {
-  display: none !important;
-}
-@media (min-width: 768px) {
-  .dashboard-grid-full {
-    display: grid;
-    grid-template-columns: 1fr 320px;
-    align-items: flex-start;
-    gap: 1rem;
-    padding: 1rem;
-  }
-  .remote-sidebar {
-    display: flex !important;
-    flex-direction: column;
-    position: sticky;
-    top: 4.5rem;
-    height: fit-content;
-    align-self: flex-start;
-  }
-}
-@media (min-width: 1024px) {
-  .dashboard-grid-full {
-    grid-template-columns: 1fr 340px;
-    gap: 1.5rem;
-    padding: 1.5rem;
-  }
-  .remote-sidebar {
-    top: 5rem;
-  }
-}
-</style>
 
-<style scoped>
 .dashboard {
   display: flex;
   flex-direction: column;
@@ -888,25 +876,7 @@ function formatTime(ts: string) {
   box-sizing: border-box;
 }
 
-.in-progress-badge {
-  position: absolute;
-  top: 0.5rem;
-  right: 0.5rem;
-  font-size: 0.65rem;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  background: var(--color-info, #2196f3);
-  color: #fff;
-  padding: 0.15rem 0.4rem;
-  border-radius: var(--radius-sm, 4px);
-  animation: pulse-glow 2s infinite;
-}
 
-@keyframes pulse-glow {
-  0% { opacity: 0.8; }
-  50% { opacity: 1; box-shadow: 0 0 8px rgba(33, 150, 243, 0.6); }
-  100% { opacity: 0.8; }
-}
 
 .in-progress-content {
   display: flex;

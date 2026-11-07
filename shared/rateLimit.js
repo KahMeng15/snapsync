@@ -36,11 +36,13 @@ function checkLimits(req, res, next, scope) {
         data.resetTime = now + WINDOW_MS;
     }
     const settings = (0, index_1.getGlobalSettings)();
-    const reqLimit = scope === 'admin' ? settings.apiRateLimitAdmin : settings.apiRateLimitShare;
-    const bwLimit = scope === 'admin' ? settings.bwLimitAdmin : settings.bwLimitShare;
-    const lockoutDur = settings.lockoutDuration * 60 * 1000;
-    if (data.reqCount >= reqLimit || (data.bytesSent / (1024 * 1024)) >= bwLimit) {
-        index_2.logger.warn(`Rate limit or bandwidth exceeded for ${clientId} in scope ${scope}. Locking out.`);
+    const reqLimit = scope === 'admin' ? (settings.apiRateLimitAdmin ?? 2000) : (settings.apiRateLimitShare ?? 300);
+    const bwLimit = scope === 'admin' ? (settings.bwLimitAdmin ?? 10000) : (settings.bwLimitShare ?? 100);
+    const lockoutDur = (settings.lockoutDuration || 5) * 60 * 1000;
+    // Enforce both request count and bandwidth limits for all routes
+    const isLimitExceeded = data.reqCount >= reqLimit || (data.bytesSent / (1024 * 1024)) >= bwLimit;
+    if (isLimitExceeded) {
+        index_2.logger.warn(`Rate limit or bandwidth exceeded for ${clientId} in scope ${scope} (${data.reqCount}/${reqLimit} reqs, ${Math.round(data.bytesSent / (1024 * 1024))}/${bwLimit} MB). Locking out.`);
         data.lockedUntil = now + lockoutDur;
         clientData.set(clientId, data);
         const lockoutMins = Math.ceil(lockoutDur / 60000);
@@ -49,11 +51,25 @@ function checkLimits(req, res, next, scope) {
     }
     data.reqCount++;
     clientData.set(clientId, data);
-    // Track bytes on finish
+    // Accurately track bytes sent across both fixed-size headers and streaming responses
+    let streamedBytes = 0;
+    const origWrite = res.write;
+    const origEnd = res.end;
+    res.write = function (chunk, ...args) {
+        if (chunk)
+            streamedBytes += Buffer.isBuffer(chunk) ? chunk.length : Buffer.byteLength(chunk);
+        return origWrite.apply(res, [chunk, ...args]);
+    };
+    res.end = function (chunk, ...args) {
+        if (chunk)
+            streamedBytes += Buffer.isBuffer(chunk) ? chunk.length : Buffer.byteLength(chunk);
+        return origEnd.apply(res, [chunk, ...args]);
+    };
     res.on('finish', () => {
         const contentLength = res.get('Content-Length');
-        if (contentLength) {
-            data.bytesSent += parseInt(contentLength, 10) || 0;
+        const totalBytes = contentLength ? parseInt(contentLength, 10) : streamedBytes;
+        if (totalBytes) {
+            data.bytesSent += totalBytes;
             clientData.set(clientId, data);
         }
     });

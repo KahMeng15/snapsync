@@ -13,6 +13,7 @@ type CameraMode = 'webcam' | 'dslr'
 
 interface BoothStateFull {
   state: BoothState
+  sessionId?: string
   phase?: 'countdown' | 'taking-photo' | 'post-photo-preview' | 'post-session' | 'retake-selection'
   retakeIndices?: number[]
   isRetake?: boolean
@@ -893,6 +894,14 @@ export class BoothApp {
   private handleBoothCommand(cmd: any) {
     if (cmd.type === 'capture') {
       if (this.isPaused) return
+      if (cmd.sessionId) {
+        this.currentSessionId = cmd.sessionId
+        this.currentFullState.sessionId = cmd.sessionId
+      }
+      if (cmd.shareUrl) {
+        this.currentFullState.shareUrl = cmd.shareUrl
+        this.photoPreview.updateShareUrl(cmd.shareUrl)
+      }
       if (!this.isLive) {
         this.goLive().then(() => setTimeout(() => this.startCapture(), 1500))
       } else if (!this.isCapturing) {
@@ -1073,6 +1082,15 @@ export class BoothApp {
     document.addEventListener('booth-ws-command', (e: Event) => {
       const cmd = (e as CustomEvent).detail
       this.handleBoothCommand(cmd)
+    })
+    document.addEventListener('booth-ws-share-id', (e: Event) => {
+      const data = (e as CustomEvent).detail
+      if (!this.currentSessionId || this.currentSessionId === data.sessionId) {
+        this.currentSessionId = data.sessionId
+        this.photoPreview.updateShareUrl(data.shareUrl)
+        this.currentFullState.sessionId = data.sessionId
+        this.currentFullState.shareUrl = data.shareUrl
+      }
     })
 
     // DSLR camera unplugged mid-session
@@ -1519,13 +1537,17 @@ export class BoothApp {
 
     const photoCount = this.settingsData.photoCount
     const paths: string[] = []
-    this.currentSessionId = `session_${Date.now()}`
+    if (!this.currentSessionId) {
+      this.currentSessionId = `session_${Date.now()}`
+    }
+    this.currentFullState.sessionId = this.currentSessionId
     this.currentSessionUploaded = false
     this.currentPaths = paths
-    this.currentFullState.shareUrl = ''
-    window.snapsync?.reserveSession(this.currentSessionId).catch((err: any) => {
-      console.warn('[BoothApp] Early session reserve failed:', err)
-    })
+    if (!this.currentFullState.shareUrl) {
+      window.snapsync?.reserveSession(this.currentSessionId).catch((err: any) => {
+        console.warn('[BoothApp] Early session reserve failed:', err)
+      })
+    }
     const audioCtx = new AudioContext()
 
     this.sessionAbortController = new AbortController()

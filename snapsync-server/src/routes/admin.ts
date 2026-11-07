@@ -12,10 +12,10 @@ import { jobQueue } from '../queue'
 import { pendingCommands } from './booth'
 import { v4 as uuidv4 } from 'uuid'
 import { applyFrame } from '../pipeline'
-import { io, disconnectBooth } from '../server'
+import { io, disconnectBooth, activeEventSessions } from '../server'
 import bcrypt from 'bcryptjs'
 const archiver = require('archiver')
-import AdmZip from 'adm-zip'
+const AdmZip = require('adm-zip')
 import { requireRole, checkLoginLockout, recordFailedLogin, clearFailedLogin } from '../middleware/authMiddleware'
 import {
   updateEventMessages, createEvent, updateEventById, getEvent, listEvents,
@@ -935,6 +935,10 @@ router.delete('/events/:id', requireRole('admin'), async (req: Request, res: Res
 
 router.get('/events/:id/photos', async (req: Request, res: Response) => {
   try {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+    res.set('Pragma', 'no-cache')
+    res.set('Expires', '0')
+
     const event = getEvent(req.params.id)
     if (!event) return res.status(404).json({ error: 'Event not found' })
 
@@ -948,19 +952,24 @@ router.get('/events/:id/photos', async (req: Request, res: Response) => {
       files = []
     }
 
+    const fileSet = new Set(files)
     const sessionMap = new Map<string, { photos: any[]; timestamps: string[]; frameName?: string | null }>()
 
-    for (const name of files) {
-      if (name.includes('_thumb') || name.includes('_strip')) continue
+    const photoFiles = files.filter(name => !name.includes('_thumb') && !name.includes('_strip') && /^(.+)_(\d+)\.\w+$/.test(name))
+    const stats = await Promise.all(photoFiles.map(name => fs.stat(path.join(eventDir, name)).catch(() => null)))
+
+    for (let i = 0; i < photoFiles.length; i++) {
+      const name = photoFiles[i]
+      const stat = stats[i]
+      if (!stat) continue
       const match = name.match(/^(.+)_(\d+)\.\w+$/)
       if (!match) continue
       const sessionId = match[1]
       if (!sessionMap.has(sessionId)) {
         sessionMap.set(sessionId, { photos: [], timestamps: [] })
       }
-      const stat = await fs.stat(path.join(eventDir, name))
       const thumbName = name.replace(/(\.\w+)$/, '_thumb$1')
-      const thumbExists = files.includes(thumbName)
+      const thumbExists = fileSet.has(thumbName)
       sessionMap.get(sessionId)!.photos.push({
         id: name,
         url: `/api/admin/events/${req.params.id}/photo/${name}`,
@@ -977,24 +986,19 @@ router.get('/events/:id/photos', async (req: Request, res: Response) => {
     const dbSessions = listEventPhotoSessions(req.params.id, true)
     const dbSessionMap = new Map(dbSessions.map(s => [s.id, s]))
 
-    let sessions = await Promise.all(Array.from(sessionMap.entries())
-      .map(async ([sessionId, data]) => {
+    let sessions = Array.from(sessionMap.entries())
+      .map(([sessionId, data]) => {
         const dbSess = dbSessionMap.get(sessionId)
         let w = dbSess ? ((dbSess as any).width || 0) : 0
         let h = dbSess ? ((dbSess as any).height || 0) : 0
 
         if ((w === 0 || h === 0) && data.photos.length > 0) {
-          try {
-            const firstPhotoPath = path.join(eventDir, data.photos[0].id)
-            const meta = await sharp(firstPhotoPath).metadata()
+          const firstPhotoPath = path.join(eventDir, data.photos[0].id)
+          sharp(firstPhotoPath).metadata().then((meta) => {
             if (meta.width && meta.height) {
-              w = meta.width
-              h = meta.height
-              setSessionDimensions(sessionId, w, h)
+              setSessionDimensions(sessionId, meta.width, meta.height)
             }
-          } catch (e: any) {
-            logger.warn(`Could not backfill dimensions for session ${sessionId}: ${e.message}`)
-          }
+          }).catch(() => {})
         }
 
         return {
@@ -1011,18 +1015,20 @@ router.get('/events/:id/photos', async (req: Request, res: Response) => {
           inProgress: false,
           uploadStatus: dbSess ? (dbSess as any).upload_status || 'complete' : 'complete',
         }
-      }))
+      })
 
     // Add any DB sessions that are in-progress / reserved / not yet uploaded
     for (const dbSess of dbSessions) {
       if (!sessionMap.has(dbSess.id)) {
+        const rawDate = (dbSess as any).created_at || new Date().toISOString()
+        const isoDate = rawDate.includes('T') ? rawDate : new Date(rawDate.replace(' ', 'T') + 'Z').toISOString()
         sessions.push({
           sessionId: dbSess.id,
           photoCount: 0,
           firstPhoto: null,
           photos: [],
-          timestamps: [(dbSess as any).created_at || new Date().toISOString()],
-          createdAt: (dbSess as any).created_at || new Date().toISOString(),
+          timestamps: [isoDate],
+          createdAt: isoDate,
           archived: dbSess.archived === 1,
           share_id: (dbSess as any).share_id || null,
           photoWidth: (dbSess as any).width || 0,
@@ -1031,6 +1037,25 @@ router.get('/events/:id/photos', async (req: Request, res: Response) => {
           uploadStatus: (dbSess as any).upload_status || 'reserved',
         })
       }
+    }
+
+    const active = activeEventSessions?.get(req.params.id)
+    if (active && !sessions.some(s => s.sessionId === active.sessionId)) {
+      const nowIso = new Date().toISOString()
+      sessions.unshift({
+        sessionId: active.sessionId,
+        photoCount: 0,
+        firstPhoto: null,
+        photos: [],
+        timestamps: [nowIso],
+        createdAt: nowIso,
+        archived: false,
+        share_id: active.shareId,
+        photoWidth: 0,
+        photoHeight: 0,
+        inProgress: true,
+        uploadStatus: 'reserved',
+      })
     }
     
     sessions.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())

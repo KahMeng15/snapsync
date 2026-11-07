@@ -214,9 +214,9 @@ export declare function getGlobalSettings(): {
     dslrWhiteBalanceKelvin: any;
     organizer: any;
     contactInfo: any;
-    apiRateLimitAdmin: any;
+    apiRateLimitAdmin: number;
     apiRateLimitShare: any;
-    bwLimitAdmin: any;
+    bwLimitAdmin: number;
     bwLimitShare: any;
     lockoutDuration: any;
     remotePreviewMaxViewers: any;

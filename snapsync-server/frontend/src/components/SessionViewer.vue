@@ -423,7 +423,10 @@ onMounted(async () => {
   await fetchEmailHistory()
 
   if (props.session.inProgress || !props.session.photos?.length) {
+    let isPolling = false
     inProgressPoll = setInterval(async () => {
+      if (isPolling) return
+      isPolling = true
       try {
         const { data } = await axios.get(`/api/admin/events/${props.eventId}/photos`)
         const updated = data.sessions?.find((s: any) => s.sessionId === props.session.sessionId)
@@ -440,7 +443,10 @@ onMounted(async () => {
           }
         }
       } catch {}
-    }, 2500)
+      finally {
+        isPolling = false
+      }
+    }, 3000)
   }
 })
 
