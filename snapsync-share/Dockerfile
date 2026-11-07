@@ -24,6 +24,10 @@ RUN npm prune --omit=dev
 FROM node:20-alpine
 WORKDIR /app
 
+# Upgrade OS packages to patch vulnerabilities and remove npm/yarn not needed in production
+RUN apk upgrade --no-cache && \
+    rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /opt/yarn*
+
 # Copy pruned shared directory (includes production node_modules)
 COPY --from=builder /app/shared ./shared
 COPY --from=builder /app/snapsync-share/package*.json ./snapsync-share/

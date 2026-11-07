@@ -13,14 +13,14 @@
   "dependencies": {
     "@snapsync/shared": "file:../shared",
     "archiver": "^8.0.0",
-    "compression": "^1.7.4",
+    "compression": "^1.8.2",
     "cors": "^2.8.5",
     "dotenv": "^16.4.1",
-    "express": "^4.18.2",
+    "express": "^4.22.3",
     "helmet": "^7.1.0",
-    "sharp": "^0.33.2",
+    "sharp": "^0.35.5",
     "ua-parser-js": "^1.0.37",
-    "uuid": "^9.0.1"
+    "uuid": "^14.0.3"
   },
   "devDependencies": {
     "@types/archiver": "^6.0.2",
@@ -28,12 +28,20 @@
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
     "@types/node": "^20.11.16",
-    "@types/sharp": "^0.31.1",
     "@types/ua-parser-js": "^0.7.39",
-    "@types/uuid": "^9.0.8",
+    "@types/uuid": "^10.0.0",
     "concurrently": "^9.2.4",
-    "esbuild": "^0.20.0",
+    "esbuild": "^0.28.2",
     "tsx": "^4.7.0",
     "typescript": "^5.3.3"
+  },
+  "overrides": {
+    "body-parser": "^1.20.9",
+    "proxy-addr": "^2.0.8",
+    "brace-expansion": "^5.0.12",
+    "file-stream-rotator": "^1.0.0",
+    "minimatch": "^11.0.5",
+    "shell-quote": "^1.12.0",
+    "qs": "^6.17.1"
   }
 }

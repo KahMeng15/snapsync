@@ -1,4 +1,4 @@
-import { Request, Response, NextFunction } from 'express'
+import type { Request, Response, NextFunction } from 'express'
 import { getGlobalSettings } from './index'
 import { logger } from './index'
 import crypto from 'crypto'
