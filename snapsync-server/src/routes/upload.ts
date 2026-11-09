@@ -13,7 +13,8 @@ const router = Router()
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const eventId = (req as any).body?.eventId
+    const rawEventId = (req as any).body?.eventId
+    const eventId = typeof rawEventId === 'string' && /^[a-zA-Z0-9_-]+$/.test(rawEventId) ? rawEventId : null
     if (eventId) {
       const dir = config.eventPhotosDir(eventId)
       fs.mkdir(dir, { recursive: true }).then(() => cb(null, dir)).catch((err) => cb(err, ''))
@@ -49,13 +50,31 @@ router.post('/', upload.array('photos', config.upload.maxFiles), async (req: Req
 
   try {
     const files = req.files as Express.Multer.File[]
-    if (!files || files.length === 0) {
+    if (!files || !Array.isArray(files) || files.length === 0) {
       return res.status(400).json({ error: 'No photos uploaded' })
     }
 
-    const { eventId, sessionId: reqSessionId, frameName, watermarkText, photoCount } = req.body
-    const sessionId = reqSessionId || uuidv4()
-    const count = parseInt(photoCount || String(files.length), 10)
+    const rawEventId = req.body?.eventId
+    const eventId = typeof rawEventId === 'string' && /^[a-zA-Z0-9_-]+$/.test(rawEventId) ? rawEventId : undefined
+
+    const rawSessionId = req.body?.sessionId
+    const sessionId = typeof rawSessionId === 'string' && /^[a-zA-Z0-9_-]+$/.test(rawSessionId) ? rawSessionId : uuidv4()
+
+    const rawFrameName = req.body?.frameName
+    const frameName = typeof rawFrameName === 'string' && rawFrameName.trim() ? rawFrameName.trim() : undefined
+
+    const rawWatermark = req.body?.watermarkText
+    const watermarkText = typeof rawWatermark === 'string' && rawWatermark.trim() ? rawWatermark.trim() : undefined
+
+    const rawPhotoCount = req.body?.photoCount
+    let parsedCount = files.length
+    if (typeof rawPhotoCount === 'string' || typeof rawPhotoCount === 'number') {
+      const parsed = parseInt(String(rawPhotoCount), 10)
+      if (Number.isInteger(parsed) && parsed > 0) {
+        parsedCount = parsed
+      }
+    }
+    const count = parsedCount
 
     logger.info(`Upload received: ${files.length} photos, session=${sessionId}${eventId ? `, event=${eventId}` : ''}`)
 

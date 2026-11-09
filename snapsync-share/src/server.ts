@@ -23,6 +23,7 @@ const corsOptions = {
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
 }
 app.use(cors(corsOptions))
+app.use(shareRateLimiter as any)
 
 const basePath = '/snapsync'
 

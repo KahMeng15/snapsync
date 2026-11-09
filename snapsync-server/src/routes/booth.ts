@@ -51,8 +51,11 @@ const upload = multer({
 
 router.post('/session/reserve', boothAuthMiddleware, async (req: Request, res: Response) => {
   try {
-    const sessionId = req.body.sessionId as string
-    if (!sessionId) return res.status(400).json({ error: 'sessionId required' })
+    const rawSessionId = req.body?.sessionId
+    if (typeof rawSessionId !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(rawSessionId)) {
+      return res.status(400).json({ error: 'Valid sessionId required' })
+    }
+    const sessionId = rawSessionId
     const eventId = (req as any).eventId
     const shareId = reservePhotoSession(sessionId, eventId)
     const baseUrl = process.env.VITE_SHARE_BASE_URL || (process.env.SHARE_BASE_URL ? `${process.env.SHARE_BASE_URL.replace(/\/$/, '')}/share` : `${req.protocol}://${req.get('host')}/share`);
@@ -137,21 +140,37 @@ router.get('/sessions', boothAuthMiddleware, async (req: Request, res: Response)
 })
 
 router.post('/upload', boothAuthMiddleware, upload.array('photos', config.upload.maxFiles), async (req: Request, res: Response) => {
+  let activeSessionId: string | undefined
   try {
     const files = req.files as Express.Multer.File[]
-    if (!files || files.length === 0) {
+    if (!files || !Array.isArray(files) || files.length === 0) {
       return res.status(400).json({ error: 'No photos uploaded' })
     }
 
-    const eventId = (req as any).eventId
-    const { photoCount } = req.body
-    const sessionId = req.body.sessionId || uuidv4()
-    const count = parseInt(photoCount || String(files.length), 10)
+    const eventId = typeof (req as any).eventId === 'string' ? (req as any).eventId : undefined
+    if (!eventId) {
+      return res.status(400).json({ error: 'Valid eventId required' })
+    }
+
+    const rawSessionId = req.body?.sessionId
+    const sessionId = typeof rawSessionId === 'string' && /^[a-zA-Z0-9_-]+$/.test(rawSessionId) ? rawSessionId : uuidv4()
+    activeSessionId = sessionId
+
+    const rawPhotoCount = req.body?.photoCount
+    let parsedCount = files.length
+    if (typeof rawPhotoCount === 'string' || typeof rawPhotoCount === 'number') {
+      const parsed = parseInt(String(rawPhotoCount), 10)
+      if (Number.isInteger(parsed) && parsed > 0) {
+        parsedCount = parsed
+      }
+    }
+    const count = parsedCount
 
     logger.info(`Booth upload: ${files.length} photos, event=${eventId}, session=${sessionId}`)
 
     const shareId = ensurePhotoSession(sessionId, eventId)
-    const shareTitle = req.body.shareTitle || null
+    const rawShareTitle = req.body?.shareTitle
+    const shareTitle = typeof rawShareTitle === 'string' && rawShareTitle.trim() ? rawShareTitle.trim() : null
     if (shareTitle) {
       updateSessionShareTitle(sessionId, shareTitle)
     }
@@ -277,7 +296,7 @@ router.post('/upload', boothAuthMiddleware, upload.array('photos', config.upload
     res.json({ success: true, eventId, sessionId, shareId, photoCount: files.length, results })
   } catch (error: any) {
     logger.error(`Upload error: ${error.stack || error.message}`)
-    try { updateUploadStatus(req.body.sessionId, 'failed') } catch {}
+    try { if (activeSessionId) updateUploadStatus(activeSessionId, 'failed') } catch {}
     res.status(500).json({ error: error.message })
   }
 })
@@ -443,8 +462,15 @@ router.post('/settings', async (req: Request, res: Response) => {
 router.post('/email-session', async (req: Request, res: Response) => {
   if (checkOtpRateLimit(req, res)) return
 
-  const { sessionId, recipientEmail } = req.body
-  const otp = req.headers['x-booth-otp'] as string
+  const rawSessionId = req.body?.sessionId
+  const rawEmail = req.body?.recipientEmail
+  const otpHeader = req.headers['x-booth-otp']
+  const otp = typeof otpHeader === 'string' ? otpHeader : Array.isArray(otpHeader) ? otpHeader[0] : ''
+
+  if (typeof rawSessionId !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(rawSessionId)) {
+    return res.status(400).json({ error: 'Valid sessionId required' })
+  }
+  const sessionId = rawSessionId
 
   if (!otp) {
     recordFailedOtpAttempt(req)
@@ -461,9 +487,11 @@ router.post('/email-session', async (req: Request, res: Response) => {
     return res.status(503).json({ error: 'Email is not configured on this server' })
   }
 
-  if (!recipientEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipientEmail)) {
+  const emailRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/
+  if (typeof rawEmail !== 'string' || rawEmail.length > 254 || !emailRegex.test(rawEmail)) {
     return res.status(400).json({ error: 'Invalid email address' })
   }
+  const recipientEmail = rawEmail
 
   const emails = getEmailSendsBySession(sessionId)
   if (emails.length >= 20) {

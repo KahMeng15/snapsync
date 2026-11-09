@@ -4,6 +4,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.shareRateLimiter = exports.adminRateLimiter = void 0;
+exports.checkBandwidthLimits = checkBandwidthLimits;
+const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 const index_1 = require("./index");
 const index_2 = require("./index");
 const crypto_1 = __importDefault(require("crypto"));
@@ -15,14 +17,13 @@ function getClientId(req) {
     const uaHash = crypto_1.default.createHash('md5').update(ua).digest('hex');
     return `${ip}:${uaHash}`;
 }
-function checkLimits(req, res, next, scope) {
+function checkBandwidthLimits(req, res, next, scope) {
     const clientId = getClientId(req);
     const now = Date.now();
     let data = clientData.get(clientId);
     if (!data || now > data.resetTime) {
-        data = { reqCount: 0, bytesSent: 0, resetTime: now + WINDOW_MS };
+        data = { bytesSent: 0, resetTime: now + WINDOW_MS };
     }
-    // Check lockout
     if (data.lockedUntil && now < data.lockedUntil) {
         const remainingMs = data.lockedUntil - now;
         const remainingMinutes = Math.ceil(remainingMs / 60000);
@@ -30,28 +31,27 @@ function checkLimits(req, res, next, scope) {
         return res.status(429).json({ error: `You have been temporarily blocked due to excessive requests. Try again in ${remainingMinutes} minute${plural}.` });
     }
     else if (data.lockedUntil && now >= data.lockedUntil) {
-        data.lockedUntil = undefined; // remove lock
-        data.reqCount = 0;
+        data.lockedUntil = undefined;
         data.bytesSent = 0;
         data.resetTime = now + WINDOW_MS;
     }
-    const settings = (0, index_1.getGlobalSettings)();
-    const reqLimit = scope === 'admin' ? (settings.apiRateLimitAdmin ?? 2000) : (settings.apiRateLimitShare ?? 300);
-    const bwLimit = scope === 'admin' ? (settings.bwLimitAdmin ?? 10000) : (settings.bwLimitShare ?? 100);
-    const lockoutDur = (settings.lockoutDuration || 5) * 60 * 1000;
-    // Enforce both request count and bandwidth limits for all routes
-    const isLimitExceeded = data.reqCount >= reqLimit || (data.bytesSent / (1024 * 1024)) >= bwLimit;
+    let bwLimit = 100;
+    let lockoutDur = 5 * 60 * 1000;
+    try {
+        const settings = (0, index_1.getGlobalSettings)();
+        bwLimit = scope === 'admin' ? (settings.bwLimitAdmin ?? 10000) : (settings.bwLimitShare ?? 100);
+        lockoutDur = (settings.lockoutDuration || 5) * 60 * 1000;
+    }
+    catch { }
+    const isLimitExceeded = (data.bytesSent / (1024 * 1024)) >= bwLimit;
     if (isLimitExceeded) {
-        index_2.logger.warn(`Rate limit or bandwidth exceeded for ${clientId} in scope ${scope} (${data.reqCount}/${reqLimit} reqs, ${Math.round(data.bytesSent / (1024 * 1024))}/${bwLimit} MB). Locking out.`);
+        index_2.logger.warn(`Bandwidth exceeded for ${clientId} in scope ${scope} (${Math.round(data.bytesSent / (1024 * 1024))}/${bwLimit} MB). Locking out.`);
         data.lockedUntil = now + lockoutDur;
         clientData.set(clientId, data);
         const lockoutMins = Math.ceil(lockoutDur / 60000);
         const plural = lockoutMins > 1 ? 's' : '';
         return res.status(429).json({ error: `You have been temporarily blocked due to excessive requests. Try again in ${lockoutMins} minute${plural}.` });
     }
-    data.reqCount++;
-    clientData.set(clientId, data);
-    // Accurately track bytes sent across both fixed-size headers and streaming responses
     let streamedBytes = 0;
     const origWrite = res.write;
     const origEnd = res.end;
@@ -75,7 +75,39 @@ function checkLimits(req, res, next, scope) {
     });
     next();
 }
-const adminRateLimiter = (req, res, next) => checkLimits(req, res, next, 'admin');
-exports.adminRateLimiter = adminRateLimiter;
-const shareRateLimiter = (req, res, next) => checkLimits(req, res, next, 'share');
-exports.shareRateLimiter = shareRateLimiter;
+exports.adminRateLimiter = (0, express_rate_limit_1.default)({
+    windowMs: WINDOW_MS,
+    limit: () => {
+        try {
+            const settings = (0, index_1.getGlobalSettings)();
+            return settings?.apiRateLimitAdmin ?? 2000;
+        }
+        catch {
+            return 2000;
+        }
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Too many requests, please try again later.' },
+    handler: (req, res, next, options) => {
+        res.status(options.statusCode).json(options.message);
+    },
+});
+exports.shareRateLimiter = (0, express_rate_limit_1.default)({
+    windowMs: WINDOW_MS,
+    limit: () => {
+        try {
+            const settings = (0, index_1.getGlobalSettings)();
+            return settings?.apiRateLimitShare ?? 300;
+        }
+        catch {
+            return 300;
+        }
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Too many requests, please try again later.' },
+    handler: (req, res, next, options) => {
+        res.status(options.statusCode).json(options.message);
+    },
+});

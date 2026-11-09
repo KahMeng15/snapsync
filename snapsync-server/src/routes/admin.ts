@@ -32,7 +32,10 @@ const zipUpload = multer({
   limits: { fileSize: 1024 * 1024 * 1024 }, // 1GB
 })
 
+import { adminRateLimiter } from '../middleware/rateLimit'
+
 const router = Router()
+router.use(adminRateLimiter)
 
 // --- USER MANAGEMENT (RBAC) ---
 
@@ -1735,12 +1738,14 @@ router.get('/events/:eventId/sessions/:sessionId/emails', async (req: Request, r
 
 router.post('/events/:eventId/sessions/:sessionId/email', async (req: Request, res: Response) => {
   try {
-    const { recipientEmail } = req.body
+    const rawEmail = req.body?.recipientEmail
     const { eventId, sessionId } = req.params
 
-    if (!recipientEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipientEmail)) {
+    const emailRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/
+    if (typeof rawEmail !== 'string' || rawEmail.length > 254 || !emailRegex.test(rawEmail)) {
       return res.status(400).json({ error: 'Invalid email address' })
     }
+    const recipientEmail = rawEmail
 
     const event = getEvent(eventId)
     if (!event) return res.status(404).json({ error: 'Event not found' })

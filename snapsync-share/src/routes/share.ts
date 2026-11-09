@@ -4,10 +4,11 @@ import fs from 'fs/promises'
 import sharp from 'sharp'
 const archiver = require('archiver')
 import { v4 as uuidv4 } from 'uuid'
-import { config, logger, getEvent, getPhotoSessionByShareId, getPhotoSession, getSessionUploadStatus, getSessionDimensions, getOrCreateEventShareToken, getEventIdByShareToken, getEventByOtp, getActiveFrames, generateSignedUrl, verifySignedUrl } from '@snapsync/shared'
+import { config, logger, getEvent, getPhotoSessionByShareId, getPhotoSession, getSessionUploadStatus, getSessionDimensions, getOrCreateEventShareToken, getEventIdByShareToken, getEventByOtp, getActiveFrames, generateSignedUrl, verifySignedUrl, shareRateLimiter } from '@snapsync/shared'
 import { UAParser } from 'ua-parser-js'
 
 const router = Router()
+router.use(shareRateLimiter as any)
 
 function extractSessionId(filename: string): string | null {
   const match = filename.match(/^(.+)_(\d+)\.\w+$/)

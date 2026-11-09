@@ -1,4 +1,5 @@
-import type { Request, Response, NextFunction } from 'express'
+import type { Request, Response, NextFunction, RequestHandler } from 'express'
+import rateLimit from 'express-rate-limit'
 import { getGlobalSettings } from './index'
 import { logger } from './index'
 import crypto from 'crypto'
@@ -6,7 +7,6 @@ import crypto from 'crypto'
 const WINDOW_MS = 15 * 60 * 1000 // 15 minutes
 
 interface RateData {
-  reqCount: number
   bytesSent: number
   resetTime: number
   lockedUntil?: number
@@ -21,39 +21,38 @@ function getClientId(req: Request) {
   return `${ip}:${uaHash}`
 }
 
-function checkLimits(req: Request, res: Response, next: NextFunction, scope: 'admin' | 'share') {
+export function checkBandwidthLimits(req: Request, res: Response, next: NextFunction, scope: 'admin' | 'share') {
   const clientId = getClientId(req)
   const now = Date.now()
   let data = clientData.get(clientId)
 
   if (!data || now > data.resetTime) {
-    data = { reqCount: 0, bytesSent: 0, resetTime: now + WINDOW_MS }
+    data = { bytesSent: 0, resetTime: now + WINDOW_MS }
   }
 
-  // Check lockout
   if (data.lockedUntil && now < data.lockedUntil) {
     const remainingMs = data.lockedUntil - now
     const remainingMinutes = Math.ceil(remainingMs / 60000)
     const plural = remainingMinutes > 1 ? 's' : ''
     return res.status(429).json({ error: `You have been temporarily blocked due to excessive requests. Try again in ${remainingMinutes} minute${plural}.` })
   } else if (data.lockedUntil && now >= data.lockedUntil) {
-    data.lockedUntil = undefined // remove lock
-    data.reqCount = 0
+    data.lockedUntil = undefined
     data.bytesSent = 0
     data.resetTime = now + WINDOW_MS
   }
 
-  const settings = getGlobalSettings()
-  
-  const reqLimit = scope === 'admin' ? (settings.apiRateLimitAdmin ?? 2000) : (settings.apiRateLimitShare ?? 300)
-  const bwLimit = scope === 'admin' ? (settings.bwLimitAdmin ?? 10000) : (settings.bwLimitShare ?? 100)
-  const lockoutDur = (settings.lockoutDuration || 5) * 60 * 1000
+  let bwLimit = 100
+  let lockoutDur = 5 * 60 * 1000
+  try {
+    const settings = getGlobalSettings()
+    bwLimit = scope === 'admin' ? (settings.bwLimitAdmin ?? 10000) : (settings.bwLimitShare ?? 100)
+    lockoutDur = (settings.lockoutDuration || 5) * 60 * 1000
+  } catch {}
 
-  // Enforce both request count and bandwidth limits for all routes
-  const isLimitExceeded = data.reqCount >= reqLimit || (data.bytesSent / (1024 * 1024)) >= bwLimit
+  const isLimitExceeded = (data.bytesSent / (1024 * 1024)) >= bwLimit
 
   if (isLimitExceeded) {
-    logger.warn(`Rate limit or bandwidth exceeded for ${clientId} in scope ${scope} (${data.reqCount}/${reqLimit} reqs, ${Math.round(data.bytesSent / (1024 * 1024))}/${bwLimit} MB). Locking out.`)
+    logger.warn(`Bandwidth exceeded for ${clientId} in scope ${scope} (${Math.round(data.bytesSent / (1024 * 1024))}/${bwLimit} MB). Locking out.`)
     data.lockedUntil = now + lockoutDur
     clientData.set(clientId, data)
     const lockoutMins = Math.ceil(lockoutDur / 60000)
@@ -61,10 +60,6 @@ function checkLimits(req: Request, res: Response, next: NextFunction, scope: 'ad
     return res.status(429).json({ error: `You have been temporarily blocked due to excessive requests. Try again in ${lockoutMins} minute${plural}.` })
   }
 
-  data.reqCount++
-  clientData.set(clientId, data)
-
-  // Accurately track bytes sent across both fixed-size headers and streaming responses
   let streamedBytes = 0
   const origWrite = res.write
   const origEnd = res.end
@@ -89,5 +84,38 @@ function checkLimits(req: Request, res: Response, next: NextFunction, scope: 'ad
   next()
 }
 
-export const adminRateLimiter = (req: Request, res: Response, next: NextFunction) => checkLimits(req, res, next, 'admin')
-export const shareRateLimiter = (req: Request, res: Response, next: NextFunction) => checkLimits(req, res, next, 'share')
+export const adminRateLimiter: RequestHandler = rateLimit({
+  windowMs: WINDOW_MS,
+  limit: () => {
+    try {
+      const settings = getGlobalSettings()
+      return settings?.apiRateLimitAdmin ?? 2000
+    } catch {
+      return 2000
+    }
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later.' },
+  handler: (req, res, next, options) => {
+    res.status(options.statusCode).json(options.message)
+  },
+}) as unknown as RequestHandler
+
+export const shareRateLimiter: RequestHandler = rateLimit({
+  windowMs: WINDOW_MS,
+  limit: () => {
+    try {
+      const settings = getGlobalSettings()
+      return settings?.apiRateLimitShare ?? 300
+    } catch {
+      return 300
+    }
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later.' },
+  handler: (req, res, next, options) => {
+    res.status(options.statusCode).json(options.message)
+  },
+}) as unknown as RequestHandler

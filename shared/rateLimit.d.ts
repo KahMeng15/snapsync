@@ -1,3 +1,4 @@
-import type { Request, Response, NextFunction } from 'express';
-export declare const adminRateLimiter: (req: Request, res: Response, next: NextFunction) => Response<any, Record<string, any>> | undefined;
-export declare const shareRateLimiter: (req: Request, res: Response, next: NextFunction) => Response<any, Record<string, any>> | undefined;
+import type { Request, Response, NextFunction, RequestHandler } from 'express';
+export declare function checkBandwidthLimits(req: Request, res: Response, next: NextFunction, scope: 'admin' | 'share'): Response<any, Record<string, any>> | undefined;
+export declare const adminRateLimiter: RequestHandler;
+export declare const shareRateLimiter: RequestHandler;
